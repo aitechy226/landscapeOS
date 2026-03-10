@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LandscapeOS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green-900: #14532d;
+      --green-800: #166534;
+      --green-700: #15803d;
+      --green-600: #16a34a;
+      --green-500: #22c55e;
+      --green-100: #dcfce7;
+      --green-50:  #f0fdf4;
+      --earth-800: #292524;
+      --earth-700: #44403c;
+      --earth-500: #78716c;
+      --earth-300: #d6d3d1;
+      --earth-100: #f5f5f4;
+      --earth-50:  #fafaf9;
+      --white: #ffffff;
+      --red-500: #ef4444;
+      --red-100: #fee2e2;
+      --yellow-500: #f59e0b;
+      --yellow-100: #fef3c7;
+      --blue-500: #3b82f6;
+      --blue-100: #dbeafe;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05);
+      --radius: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+    }
+
+    html, body, #root { height: 100%; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--earth-50);
+      color: var(--earth-800);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout */
+    .app-shell { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar {
+      width: 240px; flex-shrink: 0;
+      background: var(--earth-800);
+      display: flex; flex-direction: column;
+      padding: 0;
+    }
+    .sidebar-logo {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .logo-mark {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none;
+    }
+    .logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--green-600);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text {
+      font-family: 'DM Serif Display', serif;
+      color: var(--white); font-size: 18px; letter-spacing: -0.3px;
+    }
+    .sidebar-tenant {
+      padding: 12px 16px;
+      margin: 12px 12px 4px;
+      background: rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+    }
+    .tenant-name {
+      color: var(--white); font-size: 13px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tenant-tier {
+      color: var(--green-500); font-size: 11px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .sidebar-nav { padding: 8px 12px; flex: 1; }
+    .nav-section-label {
+      color: var(--earth-500); font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 12px 8px 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px; border-radius: var(--radius);
+      color: rgba(255,255,255,0.65); font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s; margin-bottom: 2px;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.08); color: var(--white); }
+    .nav-item.active { background: var(--green-600); color: var(--white); }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: var(--radius);
+      cursor: pointer; transition: background 0.15s;
+    }
+    .user-chip:hover { background: rgba(255,255,255,0.08); }
+    .avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--green-700);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 12px; font-weight: 600; flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { color: var(--white); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-role { color: var(--earth-500); font-size: 11px; }
+    .logout-btn { color: var(--earth-500); font-size: 14px; background: none; border: none; cursor: pointer; padding: 4px; }
+    .logout-btn:hover { color: var(--white); }
+
+    /* Main content */
+    .main-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+    .topbar {
+      background: var(--white); border-bottom: 1px solid var(--earth-300);
+      padding: 0 28px; height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .page-title { font-size: 18px; font-weight: 600; color: var(--earth-800); }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+    .page-body { padding: 28px; flex: 1; }
+
+    /* Cards */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--earth-300);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .card-title { font-size: 15px; font-weight: 600; color: var(--earth-800); }
+    .card-subtitle { font-size: 13px; color: var(--earth-500); margin-top: 2px; }
+
+    /* Stats grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--earth-300);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+    }
+    .stat-label { font-size: 12px; font-weight: 500; color: var(--earth-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--earth-800); line-height: 1; }
+    .stat-change { font-size: 12px; margin-top: 6px; }
+    .stat-change.up { color: var(--green-600); }
+    .stat-change.down { color: var(--red-500); }
+    .stat-icon { font-size: 20px; margin-bottom: 10px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 16px; border-radius: var(--radius);
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: all 0.15s; border: none; font-family: inherit;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--green-600); color: var(--white); }
+    .btn-primary:hover { background: var(--green-700); }
+    .btn-secondary { background: var(--earth-100); color: var(--earth-800); }
+    .btn-secondary:hover { background: var(--earth-300); }
+    .btn-ghost { background: transparent; color: var(--earth-700); border: 1px solid var(--earth-300); }
+    .btn-ghost:hover { background: var(--earth-100); }
+    .btn-danger { background: var(--red-500); color: var(--white); }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Forms */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 13px; font-weight: 500; color: var(--earth-700); margin-bottom: 6px; }
+    .form-input {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--earth-300); border-radius: var(--radius);
+      font-size: 14px; font-family: inherit; color: var(--earth-800);
+      background: var(--white); transition: border-color 0.15s;
+      outline: none;
+    }
+    .form-input:focus { border-color: var(--green-600); box-shadow: 0 0 0 3px rgba(22,163,74,0.1); }
+    .form-input.error { border-color: var(--red-500); }
+    .form-error { font-size: 12px; color: var(--red-500); margin-top: 4px; }
+    .form-hint { font-size: 12px; color: var(--earth-500); margin-top: 4px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-select {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--earth-300); border-radius: var(--radius);
+      font-size: 14px; font-family: inherit; color: var(--earth-800);
+      background: var(--white); cursor: pointer; outline: none;
+    }
+    .form-select:focus { border-color: var(--green-600); }
+
+    /* Table */
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--earth-50); }
+    th {
+      padding: 10px 16px; text-align: left;
+      font-size: 12px; font-weight: 600; color: var(--earth-500);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--earth-300);
+    }
+    td {
+      padding: 14px 16px; font-size: 14px; color: var(--earth-800);
+      border-bottom: 1px solid var(--earth-100);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--earth-50); }
+    .table-empty { text-align: center; padding: 48px 16px; color: var(--earth-500); }
+
+    /* Badges */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 8px; border-radius: 100px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-green { background: var(--green-100); color: var(--green-800); }
+    .badge-yellow { background: var(--yellow-100); color: #92400e; }
+    .badge-red { background: var(--red-100); color: #991b1b; }
+    .badge-blue { background: var(--blue-100); color: #1e40af; }
+    .badge-gray { background: var(--earth-100); color: var(--earth-700); }
+
+    /* Auth pages */
+    .auth-screen {
+      min-height: 100vh; display: flex;
+      background: linear-gradient(135deg, var(--earth-800) 0%, var(--green-900) 100%);
+    }
+    .auth-left {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; padding: 60px;
+      display: none;
+    }
+    .auth-right {
+      width: 100%; max-width: 480px;
+      background: var(--white); display: flex; flex-direction: column;
+      justify-content: center; padding: 48px;
+      box-shadow: var(--shadow-lg);
+    }
+    @media (min-width: 768px) {
+      .auth-left { display: flex; }
+      .auth-right { width: 480px; }
+    }
+    .auth-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+    .auth-logo-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--green-600);
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .auth-logo-text { font-family: 'DM Serif Display', serif; color: var(--earth-800); font-size: 22px; }
+    .auth-heading { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--earth-800); margin-bottom: 8px; line-height: 1.2; }
+    .auth-subheading { font-size: 15px; color: var(--earth-500); margin-bottom: 32px; }
+    .auth-footer { margin-top: 24px; text-align: center; font-size: 14px; color: var(--earth-500); }
+    .auth-footer a { color: var(--green-600); font-weight: 500; cursor: pointer; }
+    .auth-divider { text-align: center; color: var(--earth-300); font-size: 13px; margin: 20px 0; position: relative; }
+    .auth-divider::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--earth-300); }
+    .auth-divider span { background: var(--white); padding: 0 12px; position: relative; }
+
+    /* Hero text on auth left */
+    .hero-headline { font-family: 'DM Serif Display', serif; font-size: 42px; line-height: 1.1; color: var(--white); margin-bottom: 20px; }
+    .hero-headline em { color: var(--green-500); font-style: italic; }
+    .hero-features { list-style: none; }
+    .hero-features li { color: rgba(255,255,255,0.75); font-size: 15px; padding: 8px 0; display: flex; align-items: center; gap: 12px; }
+    .hero-features li::before { content: '✓'; color: var(--green-500); font-weight: 700; }
+
+    /* Onboarding wizard */
+    .wizard-container { max-width: 640px; margin: 0 auto; }
+    .wizard-steps { display: flex; align-items: center; margin-bottom: 32px; gap: 0; }
+    .wizard-step { display: flex; align-items: center; flex: 1; }
+    .step-circle {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
+    }
+    .step-circle.done { background: var(--green-600); color: white; }
+    .step-circle.active { background: var(--earth-800); color: white; }
+    .step-circle.pending { background: var(--earth-100); color: var(--earth-500); }
+    .step-line { flex: 1; height: 2px; background: var(--earth-300); margin: 0 4px; }
+    .step-line.done { background: var(--green-600); }
+
+    /* Alerts */
+    .alert {
+      padding: 12px 16px; border-radius: var(--radius);
+      font-size: 14px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start;
+    }
+    .alert-error { background: var(--red-100); color: #991b1b; border: 1px solid #fca5a5; }
+    .alert-success { background: var(--green-100); color: var(--green-800); border: 1px solid #86efac; }
+    .alert-warning { background: var(--yellow-100); color: #92400e; border: 1px solid #fcd34d; }
+
+    /* Dashboard grid */
+    .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+    /* Loading */
+    .spinner {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white; animation: spin 0.7s linear infinite;
+    }
+    .spinner.dark {
+      border: 2px solid var(--earth-300);
+      border-top-color: var(--green-600);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-screen {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; flex-direction: column; gap: 16px;
+    }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-title { font-size: 18px; font-weight: 600; color: var(--earth-800); margin-bottom: 8px; }
+    .empty-desc { font-size: 14px; color: var(--earth-500); margin-bottom: 24px; }
+
+    /* Trial banner */
+    .trial-banner {
+      background: var(--yellow-100);
+      border-bottom: 1px solid #fcd34d;
+      padding: 10px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 13px; color: #92400e;
+    }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--earth-300); margin-bottom: 20px; }
+    .tab {
+      padding: 10px 16px; font-size: 14px; font-weight: 500;
+      color: var(--earth-500); cursor: pointer; border-bottom: 2px solid transparent;
+      background: none; border-top: none; border-left: none; border-right: none;
+      font-family: inherit; margin-bottom: -1px; transition: color 0.15s;
+    }
+    .tab.active { color: var(--green-700); border-bottom-color: var(--green-600); }
+    .tab:hover:not(.active) { color: var(--earth-800); }
+
+    /* Utility */
+    .flex { display: flex; }
+    .flex-col { display: flex; flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 16px; }
+    .mb-4 { margin-bottom: 16px; }
+    .text-sm { font-size: 13px; }
+    .text-muted { color: var(--earth-500); }
+    .font-medium { font-weight: 500; }
+    .font-semibold { font-weight: 600; }
+    .w-full { width: 100%; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useContext, createContext, useCallback } = React;
+
+// ─── API Config ───────────────────────────────────────────────────────────────
+const API_BASE = window.API_BASE || 'http://localhost:8000/api/v1';
+
+// ─── Auth Context ─────────────────────────────────────────────────────────────
+const AuthContext = createContext(null);
+
+function useAuth() { return useContext(AuthContext); }
+
+function AuthProvider({ children }) {
+  const [auth, setAuth] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('ls_auth');
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+
+  const login = useCallback((data) => {
+    sessionStorage.setItem('ls_auth', JSON.stringify(data));
+    setAuth(data);
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      if (auth?.access_token) {
+        await apiFetch('/auth/logout', { method: 'POST' }, auth.access_token);
+      }
+    } catch {}
+    sessionStorage.removeItem('ls_auth');
+    setAuth(null);
+  }, [auth]);
+
+  return (
+    <AuthContext.Provider value={{ auth, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// ─── Validation helpers (basic rules + user-facing messages) ──────────────────
+const VALID = {
+  phoneDigits: (v) => (v || '').replace(/\D/g, ''),
+  phoneMin: 10,
+  phoneMax: 15,
+  nameMax: 100,
+  companyNameMax: 255,
+  emailRegex: /\S+@\S+\.\S+/,
+  passwordMin: 8,
+  slugMin: 2,
+  slugMax: 100,
+  slugRegex: /^[a-z0-9-]+$/,
+};
+function validatePhone(phone) {
+  const digits = VALID.phoneDigits(phone);
+  if (!digits.length) return { ok: false, msg: 'Enter a phone number (10–15 digits).' };
+  if (digits.length < VALID.phoneMin) return { ok: false, msg: `Phone must be at least ${VALID.phoneMin} digits (you entered ${digits.length}).` };
+  if (digits.length > VALID.phoneMax) return { ok: false, msg: `Phone must be at most ${VALID.phoneMax} digits (you entered ${digits.length}).` };
+  return { ok: true, digits };
+}
+function validateEmail(email, required) {
+  const s = (email || '').trim();
+  if (!s) return required ? { ok: false, msg: 'Email is required.' } : { ok: true };
+  if (!VALID.emailRegex.test(s)) return { ok: false, msg: 'Enter a valid email address (e.g. name@company.com).' };
+  return { ok: true };
+}
+
+// ─── API Helpers ─────────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}, token = null) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options, headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = err.detail;
+    let message;
+    if (res.status === 401) {
+      message = (typeof detail === 'object' && detail && detail.message) ? detail.message : 'Your session has expired. Please log in again.';
+    } else if (res.status === 422 && Array.isArray(detail)) {
+      const first = detail[0];
+      const field = first?.loc?.slice(-1)[0] || 'field';
+      message = first?.msg ? `Please check your input: ${field} — ${first.msg}` : 'Please check the form and fix any errors.';
+    } else if (typeof detail === 'object' && detail && detail.message) {
+      message = detail.message;
+    } else if (typeof detail === 'string') {
+      message = detail;
+    } else {
+      message = res.status === 400 ? 'Please check your input and try again.' : `Request failed (${res.status}). Please try again.`;
+    }
+    const e = new Error(message);
+    e.detail = typeof detail === 'object' && !Array.isArray(detail) ? detail : null;
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
+
+function getStoredToken() {
+  try {
+    const s = sessionStorage.getItem('ls_auth');
+    return s ? JSON.parse(s).access_token : null;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredAuth() {
+  try {
+    const s = sessionStorage.getItem('ls_auth');
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
+function useApi() {
+  const { auth } = useAuth();
+  return useCallback(
+    (path, options = {}) => apiFetch(path, options, getStoredToken() || auth?.access_token),
+    [auth]
+  );
+}
+
+// ─── Components ───────────────────────────────────────────────────────────────
+function Spinner({ dark }) {
+  return <div className={`spinner ${dark ? 'dark' : ''}`} />;
+}
+
+function Alert({ type = 'error', children }) {
+  const icons = { error: '⚠️', success: '✓', warning: '⚡' };
+  return <div className={`alert alert-${type}`}>{icons[type]} {children}</div>;
+}
+
+function Badge({ status }) {
+  const map = {
+    active: ['badge-green', 'Active'],
+    trial: ['badge-yellow', 'Trial'],
+    past_due: ['badge-red', 'Past Due'],
+    cancelled: ['badge-gray', 'Cancelled'],
+    draft: ['badge-gray', 'Draft'],
+    sent: ['badge-blue', 'Sent'],
+    accepted: ['badge-green', 'Accepted'],
+    rejected: ['badge-red', 'Rejected'],
+    owner: ['badge-green', 'Owner'],
+    admin: ['badge-blue', 'Admin'],
+    crew_lead: ['badge-yellow', 'Crew Lead'],
+    laborer: ['badge-gray', 'Laborer'],
+    starter: ['badge-gray', 'Starter'],
+    pro: ['badge-blue', 'Pro'],
+    enterprise: ['badge-green', 'Enterprise'],
+  };
+  const [cls, label] = map[status] || ['badge-gray', status];
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
+
+// ─── Login Page ───────────────────────────────────────────────────────────────
+function LoginPage({ onSwitch }) {
+  const { login } = useAuth();
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showResend, setShowResend] = useState(false);
+  const [success, setSuccess] = useState('');
+
+  const handleSubmit = async () => {
+    setError('');
+    const email = (form.email || '').trim();
+    const password = (form.password || '');
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+    if (!VALID.emailRegex.test(email)) {
+      setError('Please enter a valid email address (e.g. you@company.com).');
+      return;
+    }
+    if (password.length < VALID.passwordMin) {
+      setError(`Password must be at least ${VALID.passwordMin} characters.`);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } });
+      login(data);
+      setRoute(data.onboarding_required ? '/onboarding' : '/dashboard');
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+      setShowResend(!!(e.detail && e.detail.code === 'EMAIL_NOT_CONFIRMED'));
+    }
+    setLoading(false);
+  };
+
+  const handleResend = async () => {
+    try {
+      await apiFetch('/auth/resend-confirmation', { 
+        method: 'POST', 
+        body: { email: form.email } 
+      });
+      setError('');
+      setShowResend(false);
+      setSuccess('Confirmation email resent — check your inbox.');
+    } catch (e) {
+      setError(e.message || 'Could not resend email. Please try again.');
+    }
+  };
+
+
+
+
+
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-left">
+        <h1 className="hero-headline">Run your landscaping business<br /><em>smarter.</em></h1>
+        <ul className="hero-features">
+          <li>AI-generated quotes in seconds, on-site</li>
+          <li>Smart crew scheduling & route optimization</li>
+          <li>Automated client follow-ups & CRM</li>
+          <li>Works on desktop and iPhone</li>
+        </ul>
+      </div>
+      <div className="auth-right">
+        <div className="auth-logo">
+          <div className="auth-logo-icon">🌿</div>
+          <span className="auth-logo-text">LandscapeOS</span>
+        </div>
+        <h2 className="auth-heading">Welcome back</h2>
+        <p className="auth-subheading">Sign in to your account</p>
+
+       
+        {success && (
+          <div style={{
+            background: '#dcfce7', color: '#166534', padding: '12px 16px',
+            borderRadius: '8px', marginBottom: '16px', fontSize: '14px',
+            border: '1px solid #86efac'
+          }}>
+            ✓ {success}
+          </div>
+        )}
+        {error && <div className="form-error">{error}</div>}
+        {showResend && (
+          <div style={{ fontSize: '13px', marginTop: '8px', color: '#78716c' }}>
+            Didn't get the email?{' '}
+            <a onClick={handleResend} style={{ color: '#16a34a', cursor: 'pointer' }}>
+              Resend confirmation email
+            </a>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label">Email</label>
+          <input className="form-input" type="email" placeholder="you@company.com"
+            value={form.email} onChange={e => setForm({...form, email: e.target.value})}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Password</label>
+          <input className="form-input" type="password" placeholder="••••••••"
+            value={form.password} onChange={e => setForm({...form, password: e.target.value})}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          />
+          <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Minimum 8 characters</p>
+        </div>
+
+        <button className="btn btn-primary w-full" onClick={handleSubmit} disabled={loading}
+          style={{justifyContent:'center', padding:'12px'}}>
+          {loading ? <Spinner /> : 'Sign In'}
+        </button>
+
+        <div className="auth-footer">
+          Don't have an account? <a onClick={onSwitch}>Start free trial</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Signup Page ──────────────────────────────────────────────────────────────
+// SRIKS
+// ─── Signup Page ──────────────────────────────────────────────────────────────
+
+function SignupField({ label, field, type, placeholder, hint, value, error, onChange, onKeyDown }) {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <input
+        className="form-input"
+        type={type || 'text'}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        style={error ? { borderColor: '#ef4444' } : {}}
+      />
+      {error && (
+        <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>⚠ {error}</div>
+      )}
+      {hint && !error && (
+        <div style={{ color: '#78716c', fontSize: '12px', marginTop: '4px' }}>{hint}</div>
+      )}
+    </div>
+  );
+}
+
+function SignupPage({ onSwitch }) {
+  const { login } = useAuth();
+  const [form, setForm] = useState({
+    first_name: '', last_name: '', email: '', password: '',
+    company_name: '', company_slug: '', timezone: 'America/New_York'
+  });
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState('');
+
+  const update = (field, value) => {
+    setForm(f => ({ ...f, [field]: value }));
+    if (errors[field]) setErrors(e => ({ ...e, [field]: '' }));
+  };
+
+  const updateCompany = (value) => {
+    const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    setForm(f => ({ ...f, company_name: value, company_slug: slug }));
+    if (errors.company_name) setErrors(e => ({ ...e, company_name: '' }));
+  };
+
+  const validate = () => {
+    const e = {};
+    const fn = (form.first_name || '').trim();
+    const ln = (form.last_name || '').trim();
+    if (!fn) e.first_name = 'First name is required (1–100 characters).';
+    else if (fn.length > VALID.nameMax) e.first_name = `First name must be at most ${VALID.nameMax} characters.`;
+    if (!ln) e.last_name = 'Last name is required (1–100 characters).';
+    else if (ln.length > VALID.nameMax) e.last_name = `Last name must be at most ${VALID.nameMax} characters.`;
+    if (!form.email.trim()) e.email = 'Email is required.';
+    else if (!VALID.emailRegex.test(form.email)) e.email = 'Enter a valid email address (e.g. name@company.com).';
+    if (!form.password) e.password = 'Password is required.';
+    else if (form.password.length < VALID.passwordMin) e.password = `Password must be at least ${VALID.passwordMin} characters.`;
+    else if (!/[A-Z]/.test(form.password)) e.password = 'Password must include at least one uppercase letter.';
+    else if (!/[0-9]/.test(form.password)) e.password = 'Password must include at least one number.';
+    const cn = (form.company_name || '').trim();
+    if (!cn) e.company_name = 'Company name is required (1–255 characters).';
+    else if (cn.length > VALID.companyNameMax) e.company_name = `Company name must be at most ${VALID.companyNameMax} characters.`;
+    if (!form.company_slug || form.company_slug.length < VALID.slugMin) e.company_slug = `Company URL must be at least ${VALID.slugMin} characters (e.g. my-company).`;
+    else if (form.company_slug.length > VALID.slugMax) e.company_slug = `Company URL must be at most ${VALID.slugMax} characters.`;
+    else if (!VALID.slugRegex.test(form.company_slug)) e.company_slug = 'Company URL can only use lowercase letters, numbers, and hyphens.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      const data = await apiFetch('/auth/signup', { method: 'POST', body: form });
+      if (data.message) {
+        setSuccess(data.message);
+      } else {
+        login(data);
+        setRoute(data.onboarding_required ? '/onboarding' : '/dashboard');
+      }
+    } catch (e) {
+      setErrors({ submit: e.message || 'Something went wrong. Please try again.' });
+    }
+    setLoading(false);
+  };
+
+  const enter = { onKeyDown: e => e.key === 'Enter' && handleSubmit() };
+
+  if (success) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-left">
+          <h1 className="hero-headline">Get started in<br /><em>14 days free.</em></h1>
+        </div>
+        <div className="auth-right">
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
+            <h2 style={{ marginBottom: '12px', color: '#166534' }}>Check your email</h2>
+            <p style={{ color: '#78716c', marginBottom: '24px' }}>{success}</p>
+            <a onClick={onSwitch} style={{ color: '#16a34a', cursor: 'pointer' }}>Back to sign in</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-left">
+        <h1 className="hero-headline">Get started in<br /><em>14 days free.</em></h1>
+        <ul className="hero-features">
+          <li>No credit card required</li>
+          <li>Full access to all features during trial</li>
+          <li>Setup takes less than 5 minutes</li>
+          <li>Cancel anytime — no contracts</li>
+        </ul>
+      </div>
+      <div className="auth-right">
+        <div className="auth-form">
+          <h2 className="auth-title">Create your account</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <SignupField label="First name *" field="first_name" placeholder="Jane"
+              hint="Required. 1–100 characters."
+              value={form.first_name} error={errors.first_name}
+              onChange={v => update('first_name', v)} {...enter} />
+            <SignupField label="Last name *" field="last_name" placeholder="Smith"
+              hint="Required. 1–100 characters."
+              value={form.last_name} error={errors.last_name}
+              onChange={v => update('last_name', v)} {...enter} />
+          </div>
+
+          <SignupField label="Email *" field="email" type="email" placeholder="jane@company.com"
+            hint="Required. Valid email (e.g. name@company.com)."
+            value={form.email} error={errors.email}
+            onChange={v => update('email', v)} {...enter} />
+
+          <SignupField label="Password *" field="password" type="password" placeholder="••••••••"
+            hint="Min 8 characters, at least 1 uppercase and 1 number."
+            value={form.password} error={errors.password}
+            onChange={v => update('password', v)} {...enter} />
+
+          <SignupField label="Company name *" field="company_name" placeholder="Green Thumb Landscaping"
+            hint="Required. 1–255 characters. URL below is auto-generated."
+            value={form.company_name} error={errors.company_name}
+            onChange={v => updateCompany(v)} {...enter} />
+
+          {form.company_slug && (
+            <div style={{ color: '#78716c', fontSize: '12px', marginTop: '-8px', marginBottom: '4px' }}>
+              Your URL: landscapeos.com/<strong>{form.company_slug}</strong> (2–100 characters, letters, numbers, hyphens)
+            </div>
+          )}
+          {errors.company_slug && (
+            <div style={{ color: '#dc2626', fontSize: '12px', marginBottom: '12px' }}>⚠ {errors.company_slug}</div>
+          )}
+
+          {errors.submit && (
+            <div style={{
+              background: '#fef2f2', color: '#dc2626', padding: '12px 16px',
+              borderRadius: '8px', marginBottom: '16px', fontSize: '14px',
+              border: '1px solid #fca5a5'
+            }}>
+              ⚠ {errors.submit}
+            </div>
+          )}
+
+          <button className="btn btn-primary w-full" onClick={handleSubmit} disabled={loading}
+            style={{ justifyContent: 'center', padding: '12px' }}>
+            {loading ? <Spinner /> : 'Create Account →'}
+          </button>
+
+          <div className="auth-footer">
+            Already have an account? <a onClick={onSwitch}>Sign in</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+// SRIKS
+
+// ─── Onboarding Wizard ────────────────────────────────────────────────────────
+function OnboardingWizard({ token, onComplete }) {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const [step1, setStep1] = useState({ company_phone: '', company_address: '', timezone: 'America/New_York', tax_rate: 0, minimum_quote: 150 });
+  const [template, setTemplate] = useState('');
+  const [crewName, setCrewName] = useState('Team A');
+
+  const next = () => { setError(''); setStep(s => s + 1); };
+
+  const submitWithAuth = async (path, body) => {
+    const t = token || getStoredToken();
+    if (!t || !String(t).trim()) {
+      setError('Your session has expired. Please log in again.');
+      return;
+    }
+    await apiFetch(path, { method: 'POST', body }, t);
+  };
+
+  const submitStep1 = async () => {
+    setError('');
+    const phone = (step1.company_phone || '').trim();
+    if (!phone) {
+      setError('Business phone is required (10–15 digits).');
+      return;
+    }
+    const p = validatePhone(phone);
+    if (!p.ok) { setError(p.msg); return; }
+    const taxRate = step1.tax_rate === '' || step1.tax_rate == null ? NaN : Number(step1.tax_rate);
+    const minQuote = step1.minimum_quote === '' || step1.minimum_quote == null ? NaN : Number(step1.minimum_quote);
+    if (isNaN(taxRate) || taxRate < 0 || taxRate > 1) {
+      setError('Tax rate must be between 0% and 100%.');
+      return;
+    }
+    if (isNaN(minQuote) || minQuote < 0) {
+      setError('Minimum quote must be $0 or greater.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await submitWithAuth('/onboarding/step/1', { ...step1, tax_rate: taxRate, minimum_quote: minQuote });
+      next();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const submitStep2 = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await submitWithAuth('/onboarding/step/2', { template: template || null, services: [] });
+      next();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const submitStep3 = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await submitWithAuth('/onboarding/step/3', { materials: [] });
+      next();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const submitStep4 = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await submitWithAuth('/onboarding/step/4', { labor_rates: [] });
+      next();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const submitStep5 = async () => {
+    setError('');
+    const name = (crewName || '').trim();
+    if (!name) {
+      setError('Please enter a crew name (e.g. Team A, North Crew).');
+      return;
+    }
+    if (name.length > 255) {
+      setError('Crew name is too long.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await submitWithAuth('/onboarding/step/5', { crew_name: name });
+      onComplete();
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const templates = [
+    { id: 'lawn_care', icon: '🌱', name: 'Lawn Care', desc: 'Mowing, fertilizing, cleanup, overseeding' },
+    { id: 'hardscape', icon: '🪨', name: 'Hardscape', desc: 'Patios, walkways, retaining walls' },
+    { id: 'full_service', icon: '🌳', name: 'Full Service', desc: 'Everything — lawn, planting, hardscape, irrigation' },
+    { id: '', icon: '✏️', name: 'Custom', desc: "I'll add my own services manually" },
+  ];
+
+  const steps = ['Company', 'Services', 'Materials', 'Labor', 'Crew'];
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--earth-50)', padding: '40px 20px' }}>
+      <div className="wizard-container">
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '8px' }}>
+            <div className="auth-logo-icon">🌿</div>
+            <span style={{ fontFamily: 'DM Serif Display', fontSize: '22px' }}>LandscapeOS</span>
+          </div>
+          <h1 style={{ fontFamily: 'DM Serif Display', fontSize: '26px', marginBottom: '4px' }}>Let's set up your account</h1>
+          <p style={{ color: 'var(--earth-500)', fontSize: '15px' }}>Takes about 3 minutes</p>
+        </div>
+
+        {/* Step indicators */}
+        <div className="wizard-steps">
+          {steps.map((s, i) => (
+            <div className="wizard-step" key={i}>
+              <div className={`step-circle ${i + 1 < step ? 'done' : i + 1 === step ? 'active' : 'pending'}`}>
+                {i + 1 < step ? '✓' : i + 1}
+              </div>
+              {i < steps.length - 1 && <div className={`step-line ${i + 1 < step ? 'done' : ''}`} />}
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          {error && <Alert type="error">{error}</Alert>}
+
+          {step === 1 && (
+            <div>
+              <h3 style={{fontSize:'18px',fontWeight:'600',marginBottom:'4px'}}>Company Info</h3>
+              <p style={{color:'var(--earth-500)',fontSize:'14px',marginBottom:'20px'}}>Basic details about your business</p>
+              <div className="form-group">
+                <label className="form-label">Business phone *</label>
+                <input className="form-input" placeholder="(555) 123-4567"
+                  value={step1.company_phone} onChange={e => setStep1({...step1, company_phone: e.target.value})} />
+                <p className="form-hint">Required. 10–15 digits (numbers only).</p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Business address</label>
+                <input className="form-input" placeholder="123 Main St, Springfield, NJ"
+                  value={step1.company_address} onChange={e => setStep1({...step1, company_address: e.target.value})} />
+                <p className="form-hint">Optional.</p>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Tax rate (%)</label>
+                  <input className="form-input" type="number" placeholder="8.75" step="0.01" min="0" max="100"
+                    value={step1.tax_rate * 100}
+                    onChange={e => setStep1({...step1, tax_rate: parseFloat(e.target.value || 0) / 100})} />
+                  <p className="form-hint">0–100%. Applied to quotes automatically.</p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Minimum quote ($)</label>
+                  <input className="form-input" type="number" placeholder="150" min="0"
+                    value={step1.minimum_quote} onChange={e => setStep1({...step1, minimum_quote: parseFloat(e.target.value || 0)})} />
+                  <p className="form-hint">$0 or more.</p>
+                </div>
+              </div>
+              <div style={{display:'flex', justifyContent:'flex-end', marginTop:'8px'}}>
+                <button className="btn btn-primary" onClick={submitStep1} disabled={loading}>
+                  {loading ? <Spinner /> : 'Continue →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <h3 style={{fontSize:'18px',fontWeight:'600',marginBottom:'4px'}}>Service Catalog</h3>
+              <p style={{color:'var(--earth-500)',fontSize:'14px',marginBottom:'20px'}}>Choose a template to pre-load common services, or start from scratch</p>
+              <div className="grid-2" style={{marginBottom:'20px'}}>
+                {templates.map(t => (
+                  <div key={t.id}
+                    onClick={() => setTemplate(t.id)}
+                    style={{
+                      border: `2px solid ${template === t.id ? 'var(--green-600)' : 'var(--earth-300)'}`,
+                      borderRadius: 'var(--radius-lg)', padding: '16px', cursor: 'pointer',
+                      background: template === t.id ? 'var(--green-50)' : 'var(--white)',
+                      transition: 'all 0.15s',
+                    }}>
+                    <div style={{fontSize:'24px', marginBottom:'8px'}}>{t.icon}</div>
+                    <div style={{fontWeight:'600', fontSize:'14px', marginBottom:'4px'}}>{t.name}</div>
+                    <div style={{fontSize:'12px', color:'var(--earth-500)'}}>{t.desc}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <button className="btn btn-ghost" onClick={() => setStep(1)}>← Back</button>
+                <button className="btn btn-primary" onClick={submitStep2} disabled={loading}>
+                  {loading ? <Spinner /> : 'Continue →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h3 style={{fontSize:'18px',fontWeight:'600',marginBottom:'4px'}}>Materials Catalog</h3>
+              <p style={{color:'var(--earth-500)',fontSize:'14px',marginBottom:'20px'}}>
+                {template ? `We'll pre-load materials for the ${template.replace('_',' ')} template. You can customize them after setup.` : 'Add your materials after setup in Catalog → Materials.'}
+              </p>
+              <Alert type="success">
+                {template ? `${INDUSTRY_TEMPLATES_COUNT[template] || 4} materials will be pre-loaded from the ${template.replace('_',' ')} template.` : 'You can add materials manually after setup.'}
+              </Alert>
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <button className="btn btn-ghost" onClick={() => setStep(2)}>← Back</button>
+                <button className="btn btn-primary" onClick={submitStep3} disabled={loading}>
+                  {loading ? <Spinner /> : 'Continue →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <h3 style={{fontSize:'18px',fontWeight:'600',marginBottom:'4px'}}>Labor Rates</h3>
+              <p style={{color:'var(--earth-500)',fontSize:'14px',marginBottom:'20px'}}>
+                {template ? `Standard labor rates for ${template.replace('_',' ')} will be pre-loaded. Adjust in Settings anytime.` : 'Set your hourly rates for each crew role. You can edit these anytime.'}
+              </p>
+              <Alert type="success">Labor rates will be pre-loaded — you can adjust them in Catalog → Labor Rates after setup.</Alert>
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <button className="btn btn-ghost" onClick={() => setStep(3)}>← Back</button>
+                <button className="btn btn-primary" onClick={submitStep4} disabled={loading}>
+                  {loading ? <Spinner /> : 'Continue →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div>
+              <h3 style={{fontSize:'18px',fontWeight:'600',marginBottom:'4px'}}>Your First Crew</h3>
+              <p style={{color:'var(--earth-500)',fontSize:'14px',marginBottom:'20px'}}>Name your first crew — you can add more later</p>
+              <div className="form-group">
+                <label className="form-label">Crew name</label>
+                <input className="form-input" placeholder="Team A" maxLength={255}
+                  value={crewName} onChange={e => setCrewName(e.target.value)} />
+                <p className="form-hint">Required. 1–255 characters (e.g. Team A, North Crew).</p>
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <button className="btn btn-ghost" onClick={() => setStep(4)}>← Back</button>
+                <button className="btn btn-primary" onClick={submitStep5} disabled={loading || !crewName.trim()}>
+                  {loading ? <Spinner /> : '🎉 Launch Dashboard'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Placeholder for template count display
+const INDUSTRY_TEMPLATES_COUNT = { lawn_care: 4, hardscape: 6, full_service: 7 };
+
+// ─── Dashboard Page ───────────────────────────────────────────────────────────
+function DashboardPage() {
+  const { auth } = useAuth();
+  const tenant = auth?.tenant || {};
+  const user = auth?.user || {};
+
+  const stats = [
+    { label: 'Quotes This Month', value: '—', icon: '📋', change: null },
+    { label: 'Active Clients', value: '—', icon: '👥', change: null },
+    { label: 'Jobs Scheduled', value: '—', icon: '📅', change: null },
+    { label: 'Revenue (MTD)', value: '—', icon: '💰', change: null },
+  ];
+
+  return (
+    <div>
+      <div className="stats-grid">
+        {stats.map((s, i) => (
+          <div className="stat-card" key={i}>
+            <div className="stat-icon">{s.icon}</div>
+            <div className="stat-label">{s.label}</div>
+            <div className="stat-value">{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Recent Quotes</div>
+              <div className="card-subtitle">Latest quote activity</div>
+            </div>
+            <button className="btn btn-primary btn-sm">+ New Quote</button>
+          </div>
+          <div className="empty-state">
+            <div className="empty-icon">📋</div>
+            <div className="empty-title">No quotes yet</div>
+            <div className="empty-desc">Create your first quote to get started with Module 1</div>
+            <button className="btn btn-primary">Create Quote</button>
+          </div>
+        </div>
+
+        <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Today's Schedule</div>
+              <button className="btn btn-ghost btn-sm">View All</button>
+            </div>
+            <div style={{color:'var(--earth-500)', fontSize:'14px', textAlign:'center', padding:'20px 0'}}>
+              No jobs scheduled for today
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title" style={{marginBottom:'12px'}}>Account</div>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px'}}>
+              <span style={{fontSize:'13px', color:'var(--earth-500)'}}>Plan</span>
+              <Badge status={tenant.tier || 'starter'} />
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px'}}>
+              <span style={{fontSize:'13px', color:'var(--earth-500)'}}>Status</span>
+              <Badge status={tenant.status || 'trial'} />
+            </div>
+            {tenant.trial_ends_at && (
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <span style={{fontSize:'13px', color:'var(--earth-500)'}}>Trial ends</span>
+                <span style={{fontSize:'13px', fontWeight:'500'}}>
+                  {new Date(tenant.trial_ends_at).toLocaleDateString()}
+                </span>
+              </div>
+            )}
+            {tenant.tier === 'starter' && (
+              <button className="btn btn-primary w-full btn-sm" style={{marginTop:'12px', justifyContent:'center'}}>
+                ⬆️ Upgrade to Pro
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Clients Page ────────────────────────────────────────────────────────────
+function ClientsPage() {
+  const api = useApi();
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', property_type:'residential', address:'', city:'', state:'', zip_code:'', property_sqft:'' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api('/clients?page_size=50').then(d => { setClients(d.items || []); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const validateClient = () => {
+    const fn = (form.first_name || '').trim();
+    const ln = (form.last_name || '').trim();
+    if (!fn) { setError('First name is required (1–100 characters).'); return false; }
+    if (!ln) { setError('Last name is required (1–100 characters).'); return false; }
+    if (fn.length > VALID.nameMax) { setError(`First name must be at most ${VALID.nameMax} characters.`); return false; }
+    if (ln.length > VALID.nameMax) { setError(`Last name must be at most ${VALID.nameMax} characters.`); return false; }
+    const emailRes = validateEmail(form.email, false);
+    if (!emailRes.ok) { setError(emailRes.msg); return false; }
+    const phone = (form.phone || '').trim();
+    if (phone) {
+      const p = validatePhone(phone);
+      if (!p.ok) { setError(p.msg); return false; }
+    }
+    const sqft = form.property_sqft;
+    if (sqft !== '' && sqft != null) {
+      const n = parseInt(sqft, 10);
+      if (isNaN(n) || n < 1 || n > 999999) { setError('Property sq ft must be 1–999,999, or leave blank.'); return false; }
+    }
+    return true;
+  };
+
+  const handleAdd = async () => {
+    setError('');
+    if (!validateClient()) return;
+    const payload = {
+      first_name: (form.first_name || '').trim(),
+      last_name: (form.last_name || '').trim(),
+      email: (form.email || '').trim() || undefined,
+      phone: (form.phone || '').trim() || undefined,
+      property_type: form.property_type || 'residential',
+      address: (form.address || '').trim() || undefined,
+      city: (form.city || '').trim() || undefined,
+      state: (form.state || '').trim() || undefined,
+      zip_code: (form.zip_code || '').trim() || undefined,
+      property_sqft: form.property_sqft === '' || form.property_sqft == null ? undefined : parseInt(form.property_sqft, 10),
+    };
+    if (payload.property_sqft !== undefined && (isNaN(payload.property_sqft) || payload.property_sqft < 1)) delete payload.property_sqft;
+    setSaving(true);
+    try {
+      const client = await api('/clients', { method: 'POST', body: payload });
+      setClients(cs => [client, ...cs]);
+      setShowAdd(false);
+      setError('');
+      setForm({ first_name:'', last_name:'', email:'', phone:'', property_type:'residential', address:'', city:'', state:'', zip_code:'', property_sqft:'' });
+    } catch (e) {
+      setError(e.message || 'Could not add client. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  const filtered = clients.filter(c =>
+    !search || `${c.first_name} ${c.last_name} ${c.email || ''} ${c.phone || ''}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">Clients</div>
+            <div className="card-subtitle">{clients.length} total clients</div>
+          </div>
+          <div style={{display:'flex', gap:'10px'}}>
+            <input className="form-input" style={{width:'220px'}} placeholder="🔍 Search clients..."
+              value={search} onChange={e => setSearch(e.target.value)} />
+            <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Client</button>
+          </div>
+        </div>
+
+        {showAdd && (
+          <div style={{background:'var(--earth-50)', padding:'20px', borderRadius:'var(--radius)', marginBottom:'16px', border:'1px solid var(--earth-300)'}}>
+            <h4 style={{marginBottom:'16px', fontWeight:'600'}}>New Client</h4>
+            {error && <Alert type="error">{error}</Alert>}
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">First Name *</label>
+                <input className="form-input" value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} maxLength={VALID.nameMax} placeholder="Jane" />
+                <p style={{ color: 'var(--earth-500)', fontSize: '11px', marginTop: '2px' }}>Required, max {VALID.nameMax} characters</p></div>
+              <div className="form-group"><label className="form-label">Last Name *</label>
+                <input className="form-input" value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} maxLength={VALID.nameMax} placeholder="Smith" />
+                <p style={{ color: 'var(--earth-500)', fontSize: '11px', marginTop: '2px' }}>Required, max {VALID.nameMax} characters</p></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Email</label>
+                <input className="form-input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="jane@example.com" />
+                <p style={{ color: 'var(--earth-500)', fontSize: '11px', marginTop: '2px' }}>Optional. Valid email format.</p></div>
+              <div className="form-group"><label className="form-label">Phone</label>
+                <input className="form-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="5551234567" />
+                <p style={{ color: 'var(--earth-500)', fontSize: '11px', marginTop: '2px' }}>Optional. 10–15 digits if provided.</p></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Property Type</label>
+                <select className="form-select" value={form.property_type} onChange={e => setForm({...form, property_type: e.target.value})}>
+                  <option value="residential">Residential</option>
+                  <option value="commercial">Commercial</option>
+                </select></div>
+              <div className="form-group"><label className="form-label">Property Sq Ft</label>
+                <input className="form-input" type="number" value={form.property_sqft} onChange={e => setForm({...form, property_sqft: e.target.value})} placeholder="2500" min={1} max={999999} />
+                <p style={{ color: 'var(--earth-500)', fontSize: '11px', marginTop: '2px' }}>Optional. 1–999,999 if provided.</p></div>
+            </div>
+            <div className="form-group"><label className="form-label">Address</label>
+              <input className="form-input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} placeholder="123 Main St" /></div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">City</label>
+                <input className="form-input" value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+              <div className="form-group"><label className="form-label">State</label>
+                <input className="form-input" value={form.state} onChange={e => setForm({...form, state: e.target.value})} /></div>
+            </div>
+            <div style={{display:'flex', gap:'10px', justifyContent:'flex-end'}}>
+              <button className="btn btn-ghost" onClick={() => { setShowAdd(false); setError(''); }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAdd} disabled={saving}>
+                {saving ? <Spinner /> : 'Save Client'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? <div style={{padding:'40px', textAlign:'center'}}><Spinner dark /></div> :
+         filtered.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">👥</div>
+            <div className="empty-title">{search ? 'No clients found' : 'No clients yet'}</div>
+            <div className="empty-desc">{search ? 'Try a different search' : 'Add your first client to get started'}</div>
+            {!search && <button className="btn btn-primary" onClick={() => setShowAdd(true)}>Add Client</button>}
+          </div>
+         ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th><th>Contact</th><th>Type</th><th>Address</th><th>Sq Ft</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(c => (
+                  <tr key={c.id}>
+                    <td><span style={{fontWeight:'500'}}>{c.first_name} {c.last_name}</span>
+                      {c.company_name && <div style={{fontSize:'12px', color:'var(--earth-500)'}}>{c.company_name}</div>}</td>
+                    <td><div style={{fontSize:'13px'}}>{c.email || '—'}</div>
+                      <div style={{fontSize:'12px', color:'var(--earth-500)'}}>{c.phone || ''}</div></td>
+                    <td><Badge status={c.property_type === 'commercial' ? 'admin' : 'laborer'} /></td>
+                    <td style={{fontSize:'13px', color:'var(--earth-500)'}}>{[c.address, c.city, c.state].filter(Boolean).join(', ') || '—'}</td>
+                    <td style={{fontSize:'13px'}}>{c.property_sqft ? c.property_sqft.toLocaleString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Page ────────────────────────────────────────────────────────────
+function SettingsPage() {
+  const api = useApi();
+  const { auth } = useAuth();
+  const [tab, setTab] = useState('company');
+  const [tenant, setTenant] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [services, setServices] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [laborRates, setLaborRates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      api('/tenant'),
+      api('/users'),
+      api('/catalog/services'),
+      api('/catalog/materials'),
+      api('/catalog/labor-rates'),
+    ]).then(([t, u, sv, mt, lr]) => {
+      setTenant(t); setUsers(u); setServices(sv); setMaterials(mt); setLaborRates(lr);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const saveCompany = async () => {
+    setError(''); setSuccess('');
+    const name = (tenant.name || '').trim();
+    if (!name) { setError('Company name is required (1–255 characters).'); return; }
+    if (name.length > VALID.companyNameMax) { setError(`Company name must be at most ${VALID.companyNameMax} characters.`); return; }
+    const phone = (tenant.company_phone || '').trim();
+    if (phone) {
+      const p = validatePhone(phone);
+      if (!p.ok) { setError(p.msg); return; }
+    }
+    const emailRes = validateEmail(tenant.company_email, false);
+    if (!emailRes.ok) { setError(emailRes.msg); return; }
+    const taxRate = parseFloat(tenant.tax_rate);
+    if (isNaN(taxRate) || taxRate < 0 || taxRate > 1) { setError('Tax rate must be 0–100%.'); return; }
+    const minQuote = parseFloat(tenant.minimum_quote);
+    if (isNaN(minQuote) || minQuote < 0) { setError('Minimum quote must be $0 or greater.'); return; }
+    setSaving(true);
+    try {
+      const updated = await api('/tenant', { method: 'PATCH', body: { name, company_phone: tenant.company_phone || undefined, company_email: tenant.company_email || undefined, company_address: tenant.company_address || undefined, timezone: tenant.timezone, tax_rate: taxRate, minimum_quote: minQuote } });
+      setTenant(updated);
+      setSuccess('Company settings saved.');
+    } catch (e) {
+      setError(e.message || 'Could not save settings. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{padding:'40px',textAlign:'center'}}><Spinner dark /></div>;
+
+  return (
+    <div>
+      <div className="tabs">
+        {['company', 'users', 'catalog'].map(t => (
+          <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+            {{ company:'🏢 Company', users:'👥 Users', catalog:'📦 Catalog' }[t]}
+          </button>
+        ))}
+      </div>
+
+      {success && <Alert type="success">{success}</Alert>}
+      {error && <Alert type="error">{error}</Alert>}
+
+      {tab === 'company' && tenant && (
+        <div className="card">
+          <div className="card-title" style={{marginBottom:'20px'}}>Company Settings</div>
+          <div className="form-group"><label className="form-label">Company Name *</label>
+            <input className="form-input" value={tenant.name || ''} onChange={e => setTenant({...tenant, name: e.target.value})} maxLength={VALID.companyNameMax} placeholder="Your Company LLC" />
+            <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Required. 1–{VALID.companyNameMax} characters.</p></div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Phone</label>
+              <input className="form-input" value={tenant.company_phone || ''} onChange={e => setTenant({...tenant, company_phone: e.target.value})} placeholder="5551234567" />
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. 10–15 digits if provided.</p></div>
+            <div className="form-group"><label className="form-label">Email</label>
+              <input className="form-input" type="email" value={tenant.company_email || ''} onChange={e => setTenant({...tenant, company_email: e.target.value})} placeholder="contact@company.com" />
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. Valid email if provided.</p></div>
+          </div>
+          <div className="form-group"><label className="form-label">Address</label>
+            <input className="form-input" value={tenant.company_address || ''} onChange={e => setTenant({...tenant, company_address: e.target.value})} placeholder="123 Main St" /></div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Tax Rate (%)</label>
+              <div style={{position:'relative'}}>
+                <input className="form-input" type="number" step="0.01" min={0} max={100}
+                  value={(parseFloat(tenant.tax_rate || 0) * 100).toFixed(2)}
+                  onChange={e => setTenant({...tenant, tax_rate: parseFloat(e.target.value || 0) / 100})} />
+                <span style={{position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--earth-500)',fontSize:'13px'}}>%</span>
+              </div>
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>0–100%.</p></div>
+            <div className="form-group"><label className="form-label">Minimum Quote ($)</label>
+              <div style={{position:'relative'}}>
+                <span style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--earth-500)',fontSize:'13px'}}>$</span>
+                <input className="form-input" style={{paddingLeft:'24px'}} type="number" min={0}
+                  value={tenant.minimum_quote || 150}
+                  onChange={e => setTenant({...tenant, minimum_quote: parseFloat(e.target.value || 0)})} />
+              </div>
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>$0 or more.</p></div>
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end'}}>
+            <button className="btn btn-primary" onClick={saveCompany} disabled={saving}>{saving ? <Spinner /> : 'Save Changes'}</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Team Members ({users.length})</div>
+            <button className="btn btn-primary btn-sm">+ Invite User</button>
+          </div>
+          <div className="table-container">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td style={{fontWeight:'500'}}>{u.first_name} {u.last_name}</td>
+                    <td style={{fontSize:'13px', color:'var(--earth-500)'}}>{u.email}</td>
+                    <td><Badge status={u.role} /></td>
+                    <td><Badge status={u.is_active ? 'active' : 'cancelled'} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'catalog' && (
+        <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Services ({services.length})</div>
+              <button className="btn btn-primary btn-sm">+ Add Service</button>
+            </div>
+            {services.length === 0
+              ? <div style={{color:'var(--earth-500)',fontSize:'14px',textAlign:'center',padding:'20px'}}>No services yet</div>
+              : <div className="table-container"><table>
+                  <thead><tr><th>Name</th><th>Category</th><th>Base Price</th><th>Unit</th></tr></thead>
+                  <tbody>
+                    {services.map(s => (
+                      <tr key={s.id}>
+                        <td style={{fontWeight:'500'}}>{s.name}</td>
+                        <td style={{fontSize:'13px',color:'var(--earth-500)'}}>{s.category || '—'}</td>
+                        <td>${parseFloat(s.base_price).toFixed(2)}</td>
+                        <td style={{fontSize:'13px'}}>{s.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>}
+          </div>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Labor Rates ({laborRates.length})</div>
+              <button className="btn btn-primary btn-sm">+ Add Rate</button>
+            </div>
+            {laborRates.length === 0
+              ? <div style={{color:'var(--earth-500)',fontSize:'14px',textAlign:'center',padding:'20px'}}>No labor rates configured</div>
+              : <div className="table-container"><table>
+                  <thead><tr><th>Role</th><th>Property Type</th><th>Rate/Hour</th><th>OT Multiplier</th></tr></thead>
+                  <tbody>
+                    {laborRates.map(r => (
+                      <tr key={r.id}>
+                        <td style={{fontWeight:'500', textTransform:'capitalize'}}>{r.role.replace('_',' ')}</td>
+                        <td style={{textTransform:'capitalize'}}>{r.property_type}</td>
+                        <td>${parseFloat(r.rate_per_hour).toFixed(2)}/hr</td>
+                        <td>{r.overtime_multiplier}×</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Placeholder Pages ────────────────────────────────────────────────────────
+function PlaceholderPage({ icon, title, desc, module }) {
+  return (
+    <div className="card" style={{textAlign:'center', padding:'60px 40px'}}>
+      <div style={{fontSize:'56px', marginBottom:'16px'}}>{icon}</div>
+      <h2 style={{fontFamily:'DM Serif Display', fontSize:'24px', marginBottom:'8px'}}>{title}</h2>
+      <p style={{color:'var(--earth-500)', marginBottom:'24px', maxWidth:'400px', margin:'0 auto 24px'}}>{desc}</p>
+      <span style={{display:'inline-flex', alignItems:'center', gap:'8px', padding:'8px 16px', background:'var(--earth-100)', borderRadius:'100px', fontSize:'13px', color:'var(--earth-500)'}}>
+        🔨 Coming in {module}
+      </span>
+    </div>
+  );
+}
+
+// ─── App Shell ────────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { id: 'dashboard', icon: '🏠', label: 'Dashboard' },
+  { id: 'quotes', icon: '📋', label: 'Quotes', module: 'Module 1' },
+  { id: 'clients', icon: '👥', label: 'Clients' },
+  { id: 'schedule', icon: '📅', label: 'Schedule', module: 'Module 2' },
+  { id: 'crews', icon: '👷', label: 'Crews', module: 'Module 2' },
+  { id: 'settings', icon: '⚙️', label: 'Settings' },
+];
+
+function AppShell() {
+  const { auth, logout } = useAuth();
+  const [page, setPage] = useState('dashboard');
+  const user = auth?.user || {};
+  const tenant = auth?.tenant || {};
+
+  const trialActive = tenant.status === 'trial';
+  const trialEnds = tenant.trial_ends_at ? new Date(tenant.trial_ends_at) : null;
+  const daysLeft = trialEnds ? Math.ceil((trialEnds - new Date()) / 86400000) : null;
+
+  const initials = `${(user.first_name || '?')[0]}${(user.last_name || '?')[0]}`.toUpperCase();
+
+  const renderPage = () => {
+    switch(page) {
+      case 'dashboard': return <DashboardPage />;
+      case 'clients': return <ClientsPage />;
+      case 'settings': return <SettingsPage />;
+      case 'quotes': return <PlaceholderPage icon="📋" title="AI Quoting Engine" desc="Generate professional quotes with AI in seconds — right from the job site. Upload photos, describe the work, and get an itemized quote instantly." module="Module 1" />;
+      case 'schedule': return <PlaceholderPage icon="📅" title="Smart Scheduling" desc="Drag-and-drop crew scheduling with automatic route optimization to minimize drive time between jobs." module="Module 2" />;
+      case 'crews': return <PlaceholderPage icon="👷" title="Crew Management" desc="Manage your crews, assign jobs, and track progress in real time." module="Module 2" />;
+      default: return <DashboardPage />;
+    }
+  };
+
+  const pageTitles = { dashboard:'Dashboard', quotes:'Quotes', clients:'Clients', schedule:'Schedule', crews:'Crews', settings:'Settings' };
+
+  return (
+    <div className="flex-col" style={{height:'100vh'}}>
+      {trialActive && daysLeft !== null && daysLeft <= 10 && (
+        <div className="trial-banner">
+          <span>⏰ Your free trial ends in <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''}</strong>. Add a payment method to keep access.</span>
+          <button className="btn btn-sm" style={{background:'#92400e', color:'white', border:'none'}}>Upgrade Now</button>
+        </div>
+      )}
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar-logo">
+            <div className="logo-mark">
+              <div className="logo-icon">🌿</div>
+              <span className="logo-text">LandscapeOS</span>
+            </div>
+          </div>
+
+          <div className="sidebar-tenant">
+            <div className="tenant-name">{tenant.name || 'My Company'}</div>
+            <div className="tenant-tier">{tenant.tier || 'starter'} · {tenant.status || 'trial'}</div>
+          </div>
+
+          <nav className="sidebar-nav">
+            {NAV_ITEMS.map(item => (
+              <button key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`}
+                onClick={() => setPage(item.id)}>
+                <span className="icon">{item.icon}</span>
+                {item.label}
+                {item.module && page !== item.id && (
+                  <span style={{marginLeft:'auto', fontSize:'10px', background:'rgba(255,255,255,0.1)', padding:'2px 6px', borderRadius:'4px', color:'rgba(255,255,255,0.5)'}}>
+                    {item.module}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-footer">
+            <div className="user-chip">
+              <div className="avatar">{initials}</div>
+              <div className="user-info">
+                <div className="user-name">{user.first_name} {user.last_name}</div>
+                <div className="user-role" style={{textTransform:'capitalize'}}>{(user.role || '').replace('_',' ')}</div>
+              </div>
+              <button className="logout-btn" onClick={logout} title="Sign out">⏏</button>
+            </div>
+          </div>
+        </aside>
+
+        <div className="main-content">
+          <div className="topbar">
+            <h1 className="page-title">{pageTitles[page] || page}</h1>
+          </div>
+          <div className="page-body">{renderPage()}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Routing (hash-based so URL reflects page and reload works) ───────────────
+function getRoute() {
+  const h = window.location.hash || '#/';
+  return h.replace(/^#/, '') || '/';
+}
+
+function setRoute(path) {
+  const hash = path.startsWith('/') ? '#' + path : '#' + '/' + path;
+  if (window.location.hash !== hash) window.location.hash = hash;
+}
+
+// ─── Root App ────────────────────────────────────────────────────────────────
+function isRootRoute(route) {
+  return !route || route === '/' || route === '/login' || route === '/signup';
+}
+
+function App() {
+  const { auth } = useAuth();
+  const [view, setView] = useState(() => (getRoute() === '/signup' ? 'signup' : 'login'));
+  const [route, setRouteState] = useState(getRoute);
+
+  const atRoot = isRootRoute(route);
+  const storedAuth = getStoredAuth();
+  const authOrStored = auth || (atRoot ? null : storedAuth);
+
+  // Keep route state in sync with hash so setting hash (e.g. after login) triggers re-render and correct screen
+  React.useEffect(() => {
+    const sync = () => setRouteState(getRoute());
+    window.addEventListener('hashchange', sync);
+    sync();
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
+  // Sync login/signup view with hash only when still at a root route (avoid race when navigating to #/onboarding after login)
+  React.useEffect(() => {
+    if (!atRoot) return;
+    const onHash = () => {
+      const r = getRoute();
+      if (isRootRoute(r)) setView(r === '/signup' ? 'signup' : 'login');
+    };
+    onHash();
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [atRoot]);
+
+  // At root: only set #/login or #/signup (never #/onboarding or #/dashboard) so bookmark to localhost:3000 shows login
+  React.useEffect(() => {
+    if (atRoot) {
+      setRoute(view === 'signup' ? '/signup' : '/login');
+    }
+  }, [atRoot, view]);
+
+  // Redirect when URL doesn't match auth state (do not redirect when at root)
+  React.useEffect(() => {
+    if (atRoot) return;
+    if (!authOrStored) {
+      setRoute('/login');
+      return;
+    }
+    if (route !== '/onboarding' && route !== '/dashboard') {
+      setRoute(authOrStored.onboarding_required ? '/onboarding' : '/dashboard');
+      return;
+    }
+    if (route === '/onboarding' && !authOrStored.onboarding_required) {
+      setRoute('/dashboard');
+      return;
+    }
+    if (route === '/dashboard' && authOrStored.onboarding_required) {
+      setRoute('/onboarding');
+    }
+  }, [atRoot, authOrStored, route, authOrStored?.onboarding_required]);
+
+  // At root URL: always show login/signup, even if user has auth (so bookmark "localhost:3000" goes to login)
+  if (atRoot) {
+    return view === 'login'
+      ? <LoginPage onSwitch={() => { setView('signup'); setRoute('/signup'); }} />
+      : <SignupPage onSwitch={() => { setView('login'); setRoute('/login'); }} />;
+  }
+
+  // Not at root: require auth (use stored auth if context hasn't updated yet, e.g. right after login)
+  if (!authOrStored) {
+    return <LoginPage onSwitch={() => setRoute('/signup')} />;
+  }
+
+  const onboardingToken = getStoredToken() || (authOrStored && authOrStored.access_token);
+  if (!onboardingToken || !String(onboardingToken).trim()) {
+    return <LoginPage onSwitch={() => setRoute('/signup')} />;
+  }
+
+  const onboardingComplete = () => {
+    const stored = sessionStorage.getItem('ls_auth');
+    if (stored) {
+      const data = JSON.parse(stored);
+      data.onboarding_required = false;
+      sessionStorage.setItem('ls_auth', JSON.stringify(data));
+      setRoute('/dashboard');
+      window.location.reload();
+    }
+  };
+
+  if (route === '/onboarding') {
+    return <OnboardingWizard token={onboardingToken} onComplete={onboardingComplete} />;
+  }
+
+  if (route === '/dashboard') {
+    return <AppShell />;
+  }
+
+  return authOrStored.onboarding_required
+    ? <OnboardingWizard token={onboardingToken} onComplete={onboardingComplete} />
+    : <AppShell />;
+}
+
+function Root() {
+  return (
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  );
+}
+
+ReactDOM.render(<Root />, document.getElementById('root'));
+</script>
+</body>
+</html>

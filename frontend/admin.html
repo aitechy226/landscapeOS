@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LandscapeOS Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green-600: #16a34a;
+      --green-700: #15803d;
+      --earth-800: #292524;
+      --earth-500: #78716c;
+      --earth-100: #f5f5f4;
+      --red-500: #ef4444;
+      --red-100: #fee2e2;
+      --yellow-500: #f59e0b;
+      --blue-500: #3b82f6;
+      --white: #fff;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--earth-100);
+      color: var(--earth-800);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: var(--earth-500); font-size: 14px; margin-bottom: 24px; }
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 16px; margin-bottom: 16px; color: var(--earth-800); }
+    input[type="password"], input[type="text"], select {
+      width: 100%;
+      max-width: 400px;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--radius);
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    .btn-primary { background: var(--green-600); color: var(--white); }
+    .btn-primary:hover { background: var(--green-700); }
+    .btn-danger { background: var(--red-500); color: var(--white); }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #e5e7eb; color: var(--earth-800); }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .error { background: var(--red-100); color: #991b1b; padding: 12px; border-radius: var(--radius); margin-bottom: 16px; }
+    .success { background: #dcfce7; color: #166534; padding: 12px; border-radius: var(--radius); margin-bottom: 16px; }
+    .stats { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+    .stat { background: var(--white); padding: 16px 20px; border-radius: var(--radius); box-shadow: var(--shadow); min-width: 140px; }
+    .stat-value { font-size: 24px; font-weight: 700; color: var(--green-600); }
+    .stat-label { font-size: 12px; color: var(--earth-500); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f5f5f4; }
+    th { color: var(--earth-500); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    tr:hover { background: #fafafa; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-trial { background: #fef3c7; color: #92400e; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-cancelled { background: #f3f4f6; color: #6b7280; }
+    .badge-suspended { background: #fee2e2; color: #991b1b; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .nav-link { color: var(--green-600); text-decoration: none; font-size: 14px; }
+    .nav-link:hover { text-decoration: underline; }
+    .logout { margin-left: auto; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+    .tab { padding: 10px 16px; cursor: pointer; font-weight: 500; color: var(--earth-500); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab.active { color: var(--green-600); border-bottom-color: var(--green-600); }
+    .tab:hover { color: var(--earth-800); }
+    #audit-log pre { font-size: 12px; overflow-x: auto; background: #f5f5f4; padding: 12px; border-radius: var(--radius); max-height: 400px; overflow-y: auto; }
+    .empty { color: var(--earth-500); font-size: 14px; padding: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <!-- Unlock screen -->
+    <div id="unlock-screen">
+      <h1>LandscapeOS Admin</h1>
+      <p class="subtitle">Enter your superadmin key to continue.</p>
+      <div class="card" style="max-width: 440px;">
+        <div id="unlock-error" class="error" style="display:none;"></div>
+        <label for="admin-key" style="display:block; margin-bottom:8px; font-weight:500;">Admin key</label>
+        <input type="password" id="admin-key" placeholder="SUPERADMIN_KEY value" autocomplete="off" />
+        <button type="button" class="btn-primary" id="unlock-btn" style="margin-top:16px;">Unlock</button>
+      </div>
+    </div>
+
+    <!-- Dashboard (hidden until unlocked) -->
+    <div id="dashboard" style="display:none;">
+      <div class="header-row">
+        <div>
+          <h1>LandscapeOS Admin</h1>
+          <p class="subtitle">Tenant management and platform stats</p>
+        </div>
+        <button type="button" class="btn-secondary logout" id="logout-btn">Lock portal</button>
+      </div>
+
+      <div id="flash" class="success" style="display:none;"></div>
+      <div id="flash-err" class="error" style="display:none;"></div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="tenants">Tenants</div>
+        <div class="tab" data-tab="audit">Audit logs</div>
+      </div>
+
+      <div id="tab-tenants" class="tab-panel">
+        <div class="card">
+          <div class="header-row">
+            <h2>Tenants</h2>
+          </div>
+          <div id="tenants-table-wrap"></div>
+        </div>
+      </div>
+
+      <div id="tab-audit" class="tab-panel" style="display:none;">
+        <div class="card">
+          <h2>Audit logs</h2>
+          <p style="color:var(--earth-500); font-size:13px; margin-bottom:12px;">Optional: filter by tenant ID</p>
+          <input type="text" id="audit-tenant-id" placeholder="Tenant UUID (optional)" style="margin-bottom:16px;" />
+          <button type="button" class="btn-secondary" id="audit-load">Load logs</button>
+          <div id="audit-log" style="margin-top:16px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:8000/api/v1';
+    const ADMIN_KEY_STORAGE = 'ls_admin_key';
+
+    function getAdminKey() { return sessionStorage.getItem(ADMIN_KEY_STORAGE); }
+    function setAdminKey(k) { sessionStorage.setItem(ADMIN_KEY_STORAGE, k); }
+    function clearAdminKey() { sessionStorage.removeItem(ADMIN_KEY_STORAGE); }
+
+    async function adminFetch(path, options = {}) {
+      const key = getAdminKey();
+      const headers = { 'Content-Type': 'application/json', 'X-Admin-Key': key, ...(options.headers || {}) };
+      const res = await fetch(API_BASE + path, { ...options, headers });
+      if (res.status === 403) {
+        clearAdminKey();
+        window.location.reload();
+        throw new Error('Invalid or expired admin key');
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail?.message || err.detail || res.statusText);
+      }
+      return res.json();
+    }
+
+    function showFlash(msg, isError = false) {
+      const el = document.getElementById(isError ? 'flash-err' : 'flash');
+      const other = document.getElementById(isError ? 'flash' : 'flash-err');
+      other.style.display = 'none';
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 5000);
+    }
+
+    // Unlock
+    document.getElementById('unlock-btn').onclick = async () => {
+      const input = document.getElementById('admin-key');
+      const key = input.value.trim();
+      const errEl = document.getElementById('unlock-error');
+      errEl.style.display = 'none';
+      if (!key) { errEl.textContent = 'Enter your admin key.'; errEl.style.display = 'block'; return; }
+      try {
+        await adminFetch('/admin/stats', { headers: { 'X-Admin-Key': key } });
+        setAdminKey(key);
+        document.getElementById('unlock-screen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        loadStats();
+        loadTenants();
+      } catch (e) {
+        errEl.textContent = e.message || 'Invalid key';
+        errEl.style.display = 'block';
+      }
+    };
+    document.getElementById('admin-key').onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('unlock-btn').click(); };
+
+    document.getElementById('logout-btn').onclick = () => { clearAdminKey(); window.location.reload(); };
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(t => {
+      t.onclick = () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(x => x.style.display = 'none');
+        t.classList.add('active');
+        const id = 'tab-' + t.dataset.tab;
+        const panel = document.getElementById(id);
+        if (panel) panel.style.display = 'block';
+        if (t.dataset.tab === 'audit') loadAuditLogs();
+      };
+    });
+
+    async function loadStats() {
+      try {
+        const data = await adminFetch('/admin/stats');
+        const html = `
+          <div class="stat"><div class="stat-value">${data.tenants?.total ?? 0}</div><div class="stat-label">Tenants</div></div>
+          <div class="stat"><div class="stat-value">${data.tenants?.active ?? 0}</div><div class="stat-label">Active</div></div>
+          <div class="stat"><div class="stat-value">${data.tenants?.trial ?? 0}</div><div class="stat-label">Trial</div></div>
+          <div class="stat"><div class="stat-value">${data.quotes_total ?? 0}</div><div class="stat-label">Quotes</div></div>
+          <div class="stat"><div class="stat-value">${data.users_total ?? 0}</div><div class="stat-label">Users</div></div>
+        `;
+        document.getElementById('stats').innerHTML = html;
+      } catch (e) {
+        document.getElementById('stats').innerHTML = '<span class="empty">' + e.message + '</span>';
+      }
+    }
+
+    async function loadTenants() {
+      const wrap = document.getElementById('tenants-table-wrap');
+      wrap.innerHTML = '<p class="empty">Loading…</p>';
+      try {
+        const data = await adminFetch('/admin/tenants?page_size=100');
+        const items = data.items || [];
+        if (items.length === 0) { wrap.innerHTML = '<p class="empty">No tenants</p>'; return; }
+        const badge = (s) => {
+          const c = { trial: 'badge-trial', active: 'badge-active', cancelled: 'badge-cancelled', suspended: 'badge-suspended', past_due: 'badge-suspended' }[s] || '';
+          return '<span class="badge ' + c + '">' + (s || '') + '</span>';
+        };
+        let table = '<table><thead><tr><th>Company</th><th>Slug</th><th>Status</th><th>Tier</th><th>Users</th><th>Quotes</th><th>Actions</th></tr></thead><tbody>';
+        items.forEach(t => {
+          table += '<tr>' +
+            '<td>' + (t.name || '—') + '</td>' +
+            '<td><code>' + (t.slug || '') + '</code></td>' +
+            '<td>' + badge(t.status) + '</td>' +
+            '<td>' + (t.tier || '') + '</td>' +
+            '<td>' + (t.user_count ?? '—') + '</td>' +
+            '<td>' + (t.quote_count ?? '—') + '</td>' +
+            '<td><div class="actions">' +
+              (t.status !== 'cancelled' ? '<button type="button" class="btn-danger btn-sm" data-cancel="' + t.id + '">Cancel tenant</button>' : '') +
+              '<button type="button" class="btn-secondary btn-sm" data-status="' + t.id + '">Change status</button>' +
+              '<button type="button" class="btn-danger btn-sm" data-permanent="' + t.id + '" data-slug="' + (t.slug || '').replace(/"/g, '&quot;') + '" title="Remove from DB and Supabase Auth">Delete permanently</button>' +
+            '</div></td></tr>';
+        });
+        table += '</tbody></table>';
+        wrap.innerHTML = table;
+
+        wrap.querySelectorAll('[data-cancel]').forEach(btn => {
+          btn.onclick = () => cancelTenant(btn.dataset.cancel, btn);
+        });
+        wrap.querySelectorAll('[data-status]').forEach(btn => {
+          btn.onclick = () => changeStatus(btn.dataset.status, btn);
+        });
+        wrap.querySelectorAll('[data-permanent]').forEach(btn => {
+          btn.onclick = () => deletePermanent(btn.dataset.permanent, btn.dataset.slug || '', btn);
+        });
+      } catch (e) {
+        wrap.innerHTML = '<p class="error">' + e.message + '</p>';
+      }
+    }
+
+    async function cancelTenant(id, btn) {
+      if (!confirm('Cancel this tenant? They will not be able to sign in. The company URL can be reused for new signups.')) return;
+      btn.disabled = true;
+      try {
+        await adminFetch('/admin/tenants/' + id, { method: 'DELETE' });
+        showFlash('Tenant cancelled.');
+        loadStats();
+        loadTenants();
+      } catch (e) {
+        showFlash(e.message, true);
+      }
+      btn.disabled = false;
+    }
+
+    async function deletePermanent(id, slug, btn) {
+      const confirmMsg = 'Permanently delete this tenant? All data (users, clients, quotes, jobs, etc.) will be removed from the database and Supabase Auth. This cannot be undone.\n\nType the company slug to confirm: ' + slug;
+      const typed = prompt(confirmMsg);
+      if (typed !== slug) {
+        if (typed !== null) showFlash('Slug did not match. Not deleted.', true);
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await adminFetch('/admin/tenants/' + id + '/permanent', { method: 'DELETE' });
+        showFlash('Tenant permanently deleted.');
+        loadStats();
+        loadTenants();
+      } catch (e) {
+        showFlash(e.message, true);
+      }
+      btn.disabled = false;
+    }
+
+    async function changeStatus(id, btn) {
+      const statuses = ['trial', 'active', 'past_due', 'cancelled', 'suspended'];
+      const s = prompt('New status: ' + statuses.join(', '));
+      if (!s || !statuses.includes(s.trim().toLowerCase())) return;
+      btn.disabled = true;
+      try {
+        await adminFetch('/admin/tenants/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status: s.trim().toLowerCase() }) });
+        showFlash('Status updated.');
+        loadStats();
+        loadTenants();
+      } catch (e) {
+        showFlash(e.message, true);
+      }
+      btn.disabled = false;
+    }
+
+    async function loadAuditLogs() {
+      const tenantId = document.getElementById('audit-tenant-id').value.trim();
+      const out = document.getElementById('audit-log');
+      out.innerHTML = 'Loading…';
+      try {
+        const path = tenantId ? '/admin/audit-logs?tenant_id=' + encodeURIComponent(tenantId) + '&page=1' : '/admin/audit-logs?page=1';
+        const data = await adminFetch(path);
+        const items = data.items || [];
+        if (items.length === 0) { out.innerHTML = '<p class="empty">No audit logs</p>'; return; }
+        out.innerHTML = '<pre>' + JSON.stringify(items, null, 2) + '</pre>';
+      } catch (e) {
+        out.innerHTML = '<p class="error">' + e.message + '</p>';
+      }
+    }
+    document.getElementById('audit-load').onclick = loadAuditLogs;
+
+    // Boot: if key in session, unlock and show dashboard
+    (function() {
+      if (getAdminKey()) {
+        document.getElementById('unlock-screen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        loadStats();
+        loadTenants();
+      }
+    })();
+  </script>
+</body>
+</html>
