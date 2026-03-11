@@ -8,7 +8,7 @@ Tenants manage quotes, crews, schedules, and clients. Built mobile-first.
 - **Backend**: Python 3.11 / FastAPI / SQLAlchemy 2.0 / Alembic / Postgres (Supabase)
 - **Frontend**: React 18 / Vite / TailwindCSS (web first, Expo later for iOS)
 - **Auth**: Supabase Auth (JWT, MFA, OAuth)
-- **AI**: Google Gemini for quote generation (AI Studio API key)
+- **AI**: Groq API for quote generation (Llama models; GROQ_API_KEY from console.groq.com)
 - **Storage**: Supabase Storage
 - **Payments**: Stripe
 - **SMS**: Twilio
@@ -46,8 +46,8 @@ Tenants manage quotes, crews, schedules, and clients. Built mobile-first.
 - Health check at `/health`
 
 ## AI Model Routing
-- `quote_generation`: gemini-2.0-flash (or gemini-2.5-flash for newer; set in ai_service MODEL_ROUTING)
-- `quote_refinement`: gemini-2.0-flash
+- `quote_generation`: llama-3.3-70b-versatile (set in ai_service MODEL_ROUTING; Groq API)
+- `quote_refinement`: llama-3.3-70b-versatile
 - NEVER hardcode model names — always use `MODEL_ROUTING` dict in ai_service
 - Cache AI responses in DB with 24hr TTL by input hash (AICache model)
 

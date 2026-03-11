@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_JWT_SECRET: str   # from Supabase dashboard → Settings → API
 
-    # ─── AI (Gemini for quote generation) ───────────────────────────────────────
-    GEMINI_API_KEY: str = ""  # Google AI Studio API key; required for AI quote generation
+    # ─── AI (Groq for quote generation) ─────────────────────────────────────────
+    GROQ_API_KEY: str = ""  # Groq API key; required for AI quote generation (console.groq.com)
 
     # ─── Stripe ───────────────────────────────────────────────────────────────
     STRIPE_SECRET_KEY: str

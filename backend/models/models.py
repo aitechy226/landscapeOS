@@ -385,7 +385,7 @@ class AuditLog(Base):
 # ─── AI Response Cache ────────────────────────────────────────────────────────
 
 class AICache(Base):
-    """Cache AI (Gemini) responses to reduce costs."""
+    """Cache AI (Groq) responses to reduce costs."""
     __tablename__ = "ai_cache"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

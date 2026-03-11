@@ -1,6 +1,8 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+# Ensure app root is on Python path so "services", "api", "config" etc. resolve
+ENV PYTHONPATH=/app
 
 # System deps for python-magic and Pillow
 RUN apt-get update && apt-get install -y \

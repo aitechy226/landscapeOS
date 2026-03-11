@@ -273,7 +273,9 @@ async def generate_quote(
     quote.ai_line_items = line_items
     quote.ai_notes = result.get("notes")
     quote.ai_tokens_used = result.get("tokens_used")
-    quote.description = body.job_description
+    # Use AI-generated job summary if present; otherwise keep the user's job description
+    summary = (result.get("description_summary") or "").strip()
+    quote.description = summary if summary else (body.job_description or "")
     quote.property_sqft = body.property_sqft
     subtotal = sum(float(item.get("total", 0)) for item in line_items if isinstance(item, dict))
     quote.subtotal = subtotal
@@ -409,9 +411,17 @@ async def send_quote(
             from services.email_service import send_quote_email
             await send_quote_email(quote, body.message)
             result["methods"].append("email")
-        except ImportError:
+        except ImportError as e:
+            log.warning("quote.send_email_import_failed", quote_id=str(quote_id), error=str(e), module=getattr(e, "name", None))
             result["methods"].append("email")
-            result["email_note"] = "Email service not configured; implement services.email_service.send_quote_email."
+            result["email_note"] = (
+                "Email service could not be loaded. Add RESEND_API_KEY to your .env (get a key at resend.com), "
+                "install the resend package (pip install resend), and run the backend from the backend directory (e.g. cd backend && uvicorn main:app). "
+                "Then try again."
+            )
+        except ValueError as e:
+            log.warning("quote.send_email_config", quote_id=str(quote_id), error=str(e))
+            raise _user_error(str(e) if str(e) else "Could not send email. Please try again.", status=502)
         except Exception as e:
             log.exception("quote.send_email_failed", quote_id=str(quote_id), error=str(e))
             raise _user_error("Could not send email. Please try again later.", status=502)

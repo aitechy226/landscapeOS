@@ -1,5 +1,5 @@
 """
-AI quote generation using Google Gemini.
+AI quote generation using Groq API (Llama models).
 Uses tenant catalog (services, materials, labor) and caches responses in AICache (24hr TTL).
 
 AICache contract: use only these fields for cache logic:
@@ -27,8 +27,8 @@ from models.models import AICache, ServiceCatalog, MaterialCatalog, LaborRate, T
 log = structlog.get_logger()
 
 MODEL_ROUTING = {
-    "quote_generation": "gemini-2.0-flash",
-    "quote_refinement": "gemini-2.0-flash",
+    "quote_generation": "llama-3.3-70b-versatile",
+    "quote_refinement": "llama-3.3-70b-versatile",
 }
 AI_CACHE_TTL_HOURS = 24
 JOB_DESCRIPTION_MIN_LEN = 10
@@ -159,7 +159,7 @@ async def generate_quote_with_ai(
     quote_id: UUID | None = None,
 ) -> dict:
     """
-    Generate quote line items and notes using Google Gemini.
+    Generate quote line items and notes using Groq API (Llama).
     Loads tenant's service catalog, materials, and labor rates for context.
     Returns dict: line_items, notes, tokens_used, tax_rate (0–1), estimated_hours (optional).
     Raises ValueError for invalid input or when AI returns invalid response.
@@ -176,8 +176,8 @@ async def generate_quote_with_ai(
         raise ValueError(f"Property size must be between 0 and {PROPERTY_SQFT_MAX}.")
 
     # Load key: settings (pydantic .env) -> process env -> direct .env load from backend dir
-    api_key = (getattr(settings, "GEMINI_API_KEY", None) or "") if settings else ""
-    api_key = str(api_key).strip() or (os.environ.get("GEMINI_API_KEY") or "").strip()
+    api_key = (getattr(settings, "GROQ_API_KEY", None) or "") if settings else ""
+    api_key = str(api_key).strip() or (os.environ.get("GROQ_API_KEY") or "").strip()
     if not api_key:
         try:
             from dotenv import load_dotenv
@@ -185,16 +185,16 @@ async def generate_quote_with_ai(
             env_file = backend_dir / ".env"
             if env_file.exists():
                 load_dotenv(env_file)
-            api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+            api_key = (os.environ.get("GROQ_API_KEY") or "").strip()
         except Exception as e:
             log.warning("ai.dotenv_fallback_failed", error=str(e))
     if not api_key:
         log.warning("ai.missing_api_key", tenant_id=str(tenant_id))
         raise ValueError(
-            "AI quote generation is not configured. Set GEMINI_API_KEY in backend/.env and restart the backend."
+            "AI quote generation is not configured. Set GROQ_API_KEY in backend/.env and restart the backend."
         )
 
-    model = MODEL_ROUTING.get("quote_generation", "gemini-2.0-flash")
+    model = MODEL_ROUTING.get("quote_generation", "llama-3.3-70b-versatile")
     key = _input_hash(tenant_id, desc, property_sqft, model)
 
     cached = await _get_cached(db, tenant_id, key, model)
@@ -267,6 +267,7 @@ JOB DESCRIPTION:
 
 Return ONLY a JSON object with this exact structure:
 {{
+  "description_summary": "A short professional summary of the job (1-3 sentences) for the quote header.",
   "line_items": [
     {{
       "description": "Service or item name",
@@ -282,6 +283,7 @@ Return ONLY a JSON object with this exact structure:
 }}
 
 Rules:
+- description_summary must be a clear 1-3 sentence summary of the work (e.g. "Lawn mowing and edging for 5,000 sq ft residential property; includes trimming and debris removal.").
 - Use prices from the catalog when a service/material matches; otherwise use realistic landscaping rates.
 - Be specific and detailed with line items.
 - If property_sqft is provided, use it to estimate quantities where relevant.
@@ -289,87 +291,55 @@ Rules:
 - tax_rate must be between 0 and 1 (e.g. 0.0875 for 8.75%).
 - Return ONLY the JSON, no other text or markdown."""
 
-    def _call_gemini() -> tuple[str, int | None]:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        # BLOCK_NONE so normal landscaping job descriptions (lawn, chemicals, tools) aren't blocked
-        safety = {
-            genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-            genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_NONE,
-            genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_NONE,
-            genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_NONE,
+    async def _call_groq_httpx() -> tuple[str, int | None]:
+        """Call Groq API via httpx to avoid SDK Pydantic by_alias serialization bug."""
+        import httpx
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1024,
+            "temperature": 0.2,
         }
-        gemini = genai.GenerativeModel(model, safety_settings=safety)
-        response = gemini.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                max_output_tokens=1024,
-                temperature=0.2,
-            ),
-            safety_settings=safety,
-        )
-        # Do NOT use response.text — it raises ValueError when there's no Part (e.g. blocked/empty).
-        # Extract text only from candidates[].content.parts so we can handle empty/blocked ourselves.
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            r.raise_for_status()
+            data = r.json()
+        choices = data.get("choices") or []
         raw = ""
-        candidates = getattr(response, "candidates", None) or []
-        for cand in candidates:
-            content = getattr(cand, "content", None)
-            if not content:
-                continue
-            parts = getattr(content, "parts", None) or []
-            for part in parts:
-                text = getattr(part, "text", None)
-                if text and isinstance(text, str):
-                    raw += text
-            if raw:
-                break
-        if not raw and candidates:
-            cand = candidates[0]
-            reason = str(getattr(cand, "finish_reason", None) or "").upper()
-            if "SAFETY" in reason:
-                raise ValueError(
-                    "AI output was blocked by safety filters. Try a shorter, more neutral job description."
-                )
-            raise ValueError(
-                "AI returned no content. Try a shorter or simpler job description, then use Regenerate with AI if needed."
-            )
-        if not raw and getattr(response, "prompt_feedback", None):
-            pf = response.prompt_feedback
-            if getattr(pf, "block_reason", None):
-                raise ValueError(
-                    "AI blocked the input. Try a shorter or more neutral job description."
-                ) from None
+        if choices and isinstance(choices[0].get("message"), dict):
+            raw = (choices[0]["message"].get("content") or "").strip()
         if not raw:
-            raise ValueError(
-                "AI returned no content. Try again or use a simpler job description."
-            )
+            raise ValueError("AI returned no content. Try a shorter or simpler job description, then use Regenerate with AI if needed.")
         tokens_used = None
-        um = getattr(response, "usage_metadata", None)
-        if um:
-            tokens_used = (
-                getattr(um, "total_token_count", None)
-                or (getattr(um, "prompt_token_count", 0) or 0) + (getattr(um, "candidates_token_count", 0) or 0)
-            )
+        usage = data.get("usage")
+        if isinstance(usage, dict):
+            tokens_used = (usage.get("prompt_tokens") or 0) + (usage.get("completion_tokens") or 0)
         return raw, tokens_used
 
     try:
-        raw, tokens_used = await asyncio.to_thread(_call_gemini)
+        raw, tokens_used = await _call_groq_httpx()
+    except ValueError:
+        raise
     except Exception as e:
         err_msg = str(e).lower()
         full_msg = str(e).replace("\n", " ").strip()[:200]
-        if "api_key" in err_msg or "invalid" in err_msg or "403" in err_msg:
-            log.warning("ai.gemini_auth_error", error=str(e), tenant_id=str(tenant_id))
-            raise ValueError("AI service is not configured or key is invalid. Please check GEMINI_API_KEY.") from e
-        if "quota" in err_msg or "429" in err_msg:
-            log.warning("ai.gemini_rate_limit", error=str(e), tenant_id=str(tenant_id))
+        if "api_key" in err_msg or "invalid" in err_msg or "403" in err_msg or "401" in err_msg:
+            log.warning("ai.groq_auth_error", error=str(e), tenant_id=str(tenant_id))
+            raise ValueError("AI service is not configured or key is invalid. Please check GROQ_API_KEY.") from e
+        if "quota" in err_msg or "429" in err_msg or "rate" in err_msg:
+            log.warning("ai.groq_rate_limit", error=str(e), tenant_id=str(tenant_id))
             raise ValueError("AI service is temporarily rate limited. Please try again later.") from e
-        if "blocked" in err_msg or "safety" in err_msg or "content" in err_msg and "not" in err_msg:
-            log.warning("ai.gemini_blocked", error=str(e), tenant_id=str(tenant_id))
-            raise ValueError("AI blocked the request (safety filter). Try a different job description.") from e
-        if "404" in err_msg or "not found" in err_msg:
-            log.warning("ai.gemini_model_not_found", error=str(e), tenant_id=str(tenant_id))
+        if "404" in err_msg or "not found" in err_msg or "model" in err_msg:
+            log.warning("ai.groq_model_error", error=str(e), tenant_id=str(tenant_id))
             raise ValueError("AI model unavailable. Please try again later or contact support.") from e
-        log.exception("ai.gemini_error", error=str(e), tenant_id=str(tenant_id))
+        log.exception("ai.groq_error", error=str(e), tenant_id=str(tenant_id))
         raise ValueError(f"AI service failed: {full_msg}. Please try again later.") from e
 
     try:
@@ -408,6 +378,9 @@ Rules:
         tax_rate = tax_rate / 100
     tax_rate = min(1.0, max(0.0, tax_rate))
 
+    raw_summary = data.get("description_summary")
+    description_summary = str(raw_summary).strip()[:2000] if raw_summary is not None else ""
+
     raw_notes = data.get("notes")
     notes = str(raw_notes).strip()[:2000] if raw_notes is not None else ""
 
@@ -423,6 +396,7 @@ Rules:
 
     result = {
         "line_items": line_items,
+        "description_summary": description_summary,
         "notes": notes,
         "tokens_used": tokens_used,
         "tax_rate": tax_rate,

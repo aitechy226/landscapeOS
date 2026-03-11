@@ -20,6 +20,8 @@ services:
   # FastAPI backend
   api:
     build: ./backend
+    environment:
+      - PYTHONPATH=/app
     ports:
       - "8000:8000"
     dns:

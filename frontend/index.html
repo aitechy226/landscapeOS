@@ -1307,6 +1307,7 @@ function ClientsPage() {
   const [newQuoteSqft, setNewQuoteSqft] = useState('');
   const [generatingQuote, setGeneratingQuote] = useState(false);
   const [quoteError, setQuoteError] = useState('');
+  const [quoteSuccess, setQuoteSuccess] = useState('');
   // Quote review edits (local copy of line items for PATCH)
   const [editLineItems, setEditLineItems] = useState([]);
   const [savingQuote, setSavingQuote] = useState(false);
@@ -1327,18 +1328,28 @@ function ClientsPage() {
       .catch(() => { setQuotesLoadError('Could not load quotes. You can still create a new quote.'); setLoadingQuotes(false); });
   }, [selectedClient?.id]);
 
-  const openQuoteReview = (quote) => {
+  const [openingQuote, setOpeningQuote] = useState(false);
+  const openQuoteReview = async (quote) => {
     if (!quote || !quote.id) return;
-    setEditingQuote(quote);
     setQuoteError('');
-    const items = Array.isArray(quote.ai_line_items) ? quote.ai_line_items : [];
-    setEditLineItems(items.map(i => ({
-      description: String(i.description != null ? i.description : '').slice(0, VALID.lineItemDescMax),
-      quantity: Math.min(VALID.lineItemQtyMax, Math.max(0, Number(i.quantity) || 0)),
-      unit: String(i.unit != null ? i.unit : 'each').slice(0, 50),
-      unit_price: Math.min(VALID.lineItemPriceMax, Math.max(0, Number(i.unit_price) || 0)),
-      total: Math.round((Number(i.quantity) || 0) * (Number(i.unit_price) || 0) * 100) / 100,
-    })));
+    setOpeningQuote(true);
+    try {
+      const full = await api('/quotes/' + quote.id);
+      if (!full || !full.id) { setQuoteError('Could not load quote.'); setOpeningQuote(false); return; }
+      setEditingQuote(full);
+      const items = Array.isArray(full.ai_line_items) ? full.ai_line_items : [];
+      setEditLineItems(items.map(i => ({
+        description: String(i.description != null ? i.description : '').slice(0, VALID.lineItemDescMax),
+        quantity: Math.min(VALID.lineItemQtyMax, Math.max(0, Number(i.quantity) || 0)),
+        unit: String(i.unit != null ? i.unit : 'each').slice(0, 50),
+        unit_price: Math.min(VALID.lineItemPriceMax, Math.max(0, Number(i.unit_price) || 0)),
+        total: Math.round((Number(i.quantity) || 0) * (Number(i.unit_price) || 0) * 100) / 100,
+      })));
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not load quote.'));
+    } finally {
+      setOpeningQuote(false);
+    }
   };
 
   const validateClient = () => {
@@ -1552,13 +1563,45 @@ function ClientsPage() {
   const handleSendQuote = async (method) => {
     if (!editingQuote) return;
     setQuoteError('');
+    setQuoteSuccess('');
     setSendingQuote(true);
     try {
-      await api('/quotes/' + editingQuote.id + '/send', { method: 'POST', body: { method, message: '' } });
+      if (method === 'download') {
+        const token = getStoredToken();
+        if (!token) {
+          setQuoteError('Your session has expired. Please log in again.');
+          return;
+        }
+        const url = `${API_BASE}/quotes/${editingQuote.id}/pdf`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const msg = (err.detail && err.detail.message) ? err.detail.message : (res.statusText || 'Download failed.');
+          setQuoteError(msg);
+          return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `quote-${editingQuote.quote_number || editingQuote.id}.pdf`;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+      const result = await api('/quotes/' + editingQuote.id + '/send', { method: 'POST', body: { method, message: '' } });
+      if (result && result.email_note) {
+        setQuoteError(result.email_note);
+      } else if (result && Array.isArray(result.methods) && result.methods.includes('email')) {
+        const toEmail = (selectedClient && selectedClient.email) ? selectedClient.email : (editingQuote.client && editingQuote.client.email) ? editingQuote.client.email : null;
+        setQuoteSuccess(toEmail ? `Quote sent by email to ${toEmail}.` : 'Quote sent by email.');
+        setQuoteError('');
+      }
       const updated = await api('/quotes/' + editingQuote.id);
       setEditingQuote(updated);
     } catch (e) {
       setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not send quote. Please try again.'));
+      setQuoteSuccess('');
     } finally {
       setSendingQuote(false);
     }
@@ -1598,15 +1641,22 @@ function ClientsPage() {
     return (
       <div>
         <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="btn btn-ghost" onClick={() => { setEditingQuote(null); setQuoteError(''); }}>← Back</button>
+          <button className="btn btn-ghost" onClick={() => { setEditingQuote(null); setQuoteError(''); setQuoteSuccess(''); }}>← Back</button>
           <span className="font-semibold">Quote {editingQuote.quote_number}</span>
           <Badge status={editingQuote.status} />
         </div>
         {quoteError && <Alert type="error">{quoteError}</Alert>}
+        {quoteSuccess && <Alert type="success">{quoteSuccess}</Alert>}
         {hasNoLineItems && isDraft && (
           <Alert type="warning" style={{ marginBottom: '16px' }}>
             This quote has no line items. AI generation may have failed or timed out. Use <strong>Regenerate with AI</strong> to try again, or <strong>Delete</strong> this draft.
           </Alert>
+        )}
+        {(editingQuote.description || '').trim() && (
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <div className="card-title" style={{ fontSize: '0.95rem', marginBottom: '6px' }}>Job summary</div>
+            <p className="text-sm" style={{ margin: 0, color: 'var(--earth-700)', whiteSpace: 'pre-wrap' }}>{editingQuote.description}</p>
+          </div>
         )}
         <div className="card">
           <div className="card-header">
@@ -1620,13 +1670,19 @@ function ClientsPage() {
                   </>
                 ) : (
                   <>
-                    <button className="btn btn-secondary btn-sm" onClick={handleSaveQuote} disabled={savingQuote || deletingQuote}>{savingQuote ? <Spinner /> : 'Save'}</button>
+                    <button className="btn btn-primary btn-sm" onClick={handleSaveQuote} disabled={savingQuote || deletingQuote}>{savingQuote ? <Spinner /> : 'Save'}</button>
                     <button className="btn btn-primary btn-sm" onClick={handleApproveQuote} disabled={savingQuote || deletingQuote}>{savingQuote ? <Spinner /> : 'Approve'}</button>
                     <button className="btn btn-primary btn-sm" onClick={() => handleSendQuote('email')} disabled={sendingQuote || deletingQuote}>{sendingQuote ? <Spinner /> : 'Send by email'}</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => handleSendQuote('download')} disabled={sendingQuote || deletingQuote}>Download PDF</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => handleSendQuote('download')} disabled={sendingQuote || deletingQuote}>{sendingQuote ? <Spinner /> : 'Download PDF'}</button>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', marginLeft: 'auto' }} onClick={handleDeleteQuote} disabled={savingQuote || sendingQuote || deletingQuote} title="Delete this draft quote">{deletingQuote ? <Spinner /> : 'Delete'}</button>
                   </>
                 )}
+              </div>
+            )}
+            {!isDraft && !hasNoLineItems && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={() => handleSendQuote('email')} disabled={sendingQuote} title="Resend this quote to the client by email">{sendingQuote ? <Spinner /> : 'Resend by email'}</button>
+                <button className="btn btn-primary btn-sm" onClick={() => handleSendQuote('download')} disabled={sendingQuote}>Download PDF</button>
               </div>
             )}
           </div>
@@ -1697,7 +1753,7 @@ function ClientsPage() {
                         <td className="text-sm text-muted">{(q.description || '').slice(0, 50)}{(q.description || '').length > 50 ? '…' : ''}</td>
                         <td>${Number(q.total || 0).toFixed(2)}</td>
                         <td className="text-sm">{q.created_at ? new Date(q.created_at).toLocaleDateString() : '—'}</td>
-                        <td><button className="btn btn-ghost btn-sm" onClick={() => openQuoteReview(q)}>View / Edit</button></td>
+                        <td><button className="btn btn-ghost btn-sm" onClick={() => openQuoteReview(q)} disabled={openingQuote}>{openingQuote ? <Spinner /> : 'View / Edit'}</button></td>
                       </tr>
                     ))}
                   </tbody>
