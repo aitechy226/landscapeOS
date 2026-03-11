@@ -101,6 +101,9 @@ class Tenant(Base, TimestampMixin):
     trial_ends_at = Column(DateTime(timezone=True))
     billing_email = Column(String(255))
 
+    # Onboarding: set when user completes the setup wizard (step 5)
+    onboarding_completed_at = Column(DateTime(timezone=True), nullable=True)
+
     # Settings
     timezone = Column(String(50), default="America/New_York")
     currency = Column(String(3), default="USD")

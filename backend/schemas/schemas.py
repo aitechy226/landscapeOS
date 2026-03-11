@@ -131,7 +131,7 @@ class UpdateTenantRequest(BaseModel):
     timezone: Optional[str] = None
     currency: Optional[str] = Field(None, max_length=3)
     tax_rate: Optional[Decimal] = Field(None, ge=0, le=1)
-    minimum_quote: Optional[Decimal] = Field(None, ge=0)
+    minimum_quote: Optional[Decimal] = Field(None, ge=0, le=500)
     travel_surcharge_miles: Optional[int] = Field(None, ge=0)
     travel_surcharge_amount: Optional[Decimal] = Field(None, ge=0)
 
@@ -317,7 +317,7 @@ class OnboardingStep1(BaseModel):
     company_address: Optional[str] = Field(None, max_length=500)
     timezone: str = "America/New_York"
     tax_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
-    minimum_quote: Decimal = Field(default=Decimal("150"), ge=0)
+    minimum_quote: Decimal = Field(default=Decimal("150"), ge=0, le=500)
 
 
 class OnboardingStep2(BaseModel):

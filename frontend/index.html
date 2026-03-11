@@ -137,6 +137,7 @@
       flex-shrink: 0;
     }
     .page-title { font-size: 18px; font-weight: 600; color: var(--earth-800); }
+    .topbar-company { font-size: 14px; color: var(--green-600); font-weight: 600; }
     .topbar-actions { display: flex; gap: 10px; align-items: center; }
     .page-body { padding: 28px; flex: 1; }
 
@@ -396,6 +397,15 @@ function AuthProvider({ children }) {
     setAuth(data);
   }, []);
 
+  const updateTenant = useCallback((updates) => {
+    setAuth(prev => {
+      if (!prev || !prev.tenant) return prev;
+      const next = { ...prev, tenant: { ...prev.tenant, ...updates } };
+      sessionStorage.setItem('ls_auth', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       if (auth?.access_token) {
@@ -407,7 +417,7 @@ function AuthProvider({ children }) {
   }, [auth]);
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout }}>
+    <AuthContext.Provider value={{ auth, login, logout, updateTenant }}>
       {children}
     </AuthContext.Provider>
   );
@@ -420,6 +430,7 @@ const VALID = {
   phoneMax: 15,
   nameMax: 100,
   companyNameMax: 255,
+  companyAddressMax: 500,
   emailRegex: /\S+@\S+\.\S+/,
   passwordMin: 8,
   slugMin: 2,
@@ -438,6 +449,43 @@ function validateEmail(email, required) {
   if (!s) return required ? { ok: false, msg: 'Email is required.' } : { ok: true };
   if (!VALID.emailRegex.test(s)) return { ok: false, msg: 'Enter a valid email address (e.g. name@company.com).' };
   return { ok: true };
+}
+/** Parse tax rate as percentage string (e.g. "8.75") to 0–1 decimal. Valid: 0–100, up to 2 decimal places. */
+function parseTaxRatePercent(str) {
+  const s = String(str ?? '').trim();
+  if (s === '') return { ok: true, value: 0 };
+  const n = parseFloat(s);
+  if (isNaN(n)) return { ok: false, msg: 'Enter a number (e.g. 8.25 for 8.25%).' };
+  if (n < 0 || n > 100) return { ok: false, msg: 'Tax rate must be between 0 and 100%.' };
+  const hasMoreThanTwoDecimals = /\.\d{3,}$/.test(s) || (s.includes('.') && s.split('.')[1].length > 2);
+  if (hasMoreThanTwoDecimals) return { ok: false, msg: 'Use at most 2 decimal places (e.g. 8.25).' };
+  const value = Math.round(n * 100) / 10000;
+  return { ok: true, value };
+}
+/** Format stored tax rate (0–1) for display as percentage string (d or d.dd). */
+function formatTaxRateDisplay(taxRate) {
+  if (taxRate == null || isNaN(taxRate)) return '';
+  const pct = taxRate * 100;
+  return pct % 1 === 0 ? String(Math.round(pct)) : pct.toFixed(2).replace(/\.?0+$/, '');
+}
+/** Parse minimum quote from string (allows digits, optional decimal, strips $ and commas). Value in dollars, >= 0, max 2 decimals. */
+function parseMinimumQuote(str) {
+  const s = String(str ?? '').trim().replace(/[$,\s]/g, '');
+  if (s === '') return { ok: false, msg: 'Enter a minimum quote amount (e.g. 150 or 99.50).' };
+  const n = parseFloat(s);
+  if (isNaN(n)) return { ok: false, msg: 'Enter a valid number (e.g. 150 or 99.50).' };
+  if (n < 0) return { ok: false, msg: 'Minimum quote must be $0 or greater.' };
+  if (n > 500) return { ok: false, msg: 'Minimum quote must be $500 or less.' };
+  const hasMoreThanTwoDecimals = /\.\d{3,}$/.test(s) || (s.includes('.') && s.split('.')[1].length > 2);
+  if (hasMoreThanTwoDecimals) return { ok: false, msg: 'Use at most 2 decimal places (e.g. 99.50).' };
+  const value = Math.round(n * 100) / 100;
+  return { ok: true, value };
+}
+/** Format stored minimum quote for display (d or d.dd). */
+function formatMinimumQuoteDisplay(value) {
+  if (value == null || isNaN(value)) return '';
+  const n = Number(value);
+  return n % 1 === 0 ? String(Math.round(n)) : n.toFixed(2).replace(/\.?0+$/, '');
 }
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
@@ -852,6 +900,8 @@ function OnboardingWizard({ token, onComplete }) {
   const [error, setError] = useState('');
 
   const [step1, setStep1] = useState({ company_phone: '', company_address: '', timezone: 'America/New_York', tax_rate: 0, minimum_quote: 150 });
+  const [step1TaxRateInput, setStep1TaxRateInput] = useState('0');
+  const [step1MinQuoteInput, setStep1MinQuoteInput] = useState('150');
   const [template, setTemplate] = useState('');
   const [crewName, setCrewName] = useState('Team A');
 
@@ -875,16 +925,12 @@ function OnboardingWizard({ token, onComplete }) {
     }
     const p = validatePhone(phone);
     if (!p.ok) { setError(p.msg); return; }
-    const taxRate = step1.tax_rate === '' || step1.tax_rate == null ? NaN : Number(step1.tax_rate);
-    const minQuote = step1.minimum_quote === '' || step1.minimum_quote == null ? NaN : Number(step1.minimum_quote);
-    if (isNaN(taxRate) || taxRate < 0 || taxRate > 1) {
-      setError('Tax rate must be between 0% and 100%.');
-      return;
-    }
-    if (isNaN(minQuote) || minQuote < 0) {
-      setError('Minimum quote must be $0 or greater.');
-      return;
-    }
+    const taxRes = parseTaxRatePercent(step1TaxRateInput);
+    if (!taxRes.ok) { setError(taxRes.msg); return; }
+    const taxRate = taxRes.value;
+    const minQuoteRes = parseMinimumQuote(step1MinQuoteInput);
+    if (!minQuoteRes.ok) { setError(minQuoteRes.msg); return; }
+    const minQuote = minQuoteRes.value;
     setLoading(true);
     try {
       await submitWithAuth('/onboarding/step/1', { ...step1, tax_rate: taxRate, minimum_quote: minQuote });
@@ -1007,16 +1053,19 @@ function OnboardingWizard({ token, onComplete }) {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Tax rate (%)</label>
-                  <input className="form-input" type="number" placeholder="8.75" step="0.01" min="0" max="100"
-                    value={step1.tax_rate * 100}
-                    onChange={e => setStep1({...step1, tax_rate: parseFloat(e.target.value || 0) / 100})} />
-                  <p className="form-hint">0–100%. Applied to quotes automatically.</p>
+                  <input className="form-input" type="text" inputMode="decimal" autoComplete="off"
+                    placeholder="e.g. 8.25"
+                    value={step1TaxRateInput}
+                    onChange={e => setStep1TaxRateInput(e.target.value)} />
+                  <p className="form-hint">0–100, up to 2 decimals (e.g. 8.25 for 8.25%). Applied to quotes.</p>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Minimum quote ($)</label>
-                  <input className="form-input" type="number" placeholder="150" min="0"
-                    value={step1.minimum_quote} onChange={e => setStep1({...step1, minimum_quote: parseFloat(e.target.value || 0)})} />
-                  <p className="form-hint">$0 or more.</p>
+                  <input className="form-input" type="text" inputMode="decimal" autoComplete="off"
+                    placeholder="e.g. 150 or 99.50"
+                    value={step1MinQuoteInput}
+                    onChange={e => setStep1MinQuoteInput(e.target.value)} />
+                  <p className="form-hint">$0–$500, up to 2 decimals (e.g. 150 or 99.50).</p>
                 </div>
               </div>
               <div style={{display:'flex', justifyContent:'flex-end', marginTop:'8px'}}>
@@ -1372,9 +1421,11 @@ function ClientsPage() {
 // ─── Settings Page ────────────────────────────────────────────────────────────
 function SettingsPage() {
   const api = useApi();
-  const { auth } = useAuth();
+  const { updateTenant } = useAuth();
   const [tab, setTab] = useState('company');
   const [tenant, setTenant] = useState(null);
+  const [taxRateInput, setTaxRateInput] = useState('');
+  const [minQuoteInput, setMinQuoteInput] = useState('');
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -1383,6 +1434,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({ name: '', phone: '', email: '', address: '' });
 
   useEffect(() => {
     Promise.all([
@@ -1392,32 +1444,65 @@ function SettingsPage() {
       api('/catalog/materials'),
       api('/catalog/labor-rates'),
     ]).then(([t, u, sv, mt, lr]) => {
-      setTenant(t); setUsers(u); setServices(sv); setMaterials(mt); setLaborRates(lr);
+      setTenant(t); setTaxRateInput(formatTaxRateDisplay(t?.tax_rate)); setMinQuoteInput(formatMinimumQuoteDisplay(t?.minimum_quote) || '150'); setUsers(u); setServices(sv); setMaterials(mt); setLaborRates(lr);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
   const saveCompany = async () => {
     setError(''); setSuccess('');
+    setFieldErrors({ name: '', phone: '', email: '', address: '' });
+    const errs = { name: '', phone: '', email: '', address: '' };
+    let hasError = false;
+
     const name = (tenant.name || '').trim();
-    if (!name) { setError('Company name is required (1–255 characters).'); return; }
-    if (name.length > VALID.companyNameMax) { setError(`Company name must be at most ${VALID.companyNameMax} characters.`); return; }
+    if (!name) {
+      errs.name = 'Company name is required (1–255 characters).';
+      hasError = true;
+    } else if (name.length > VALID.companyNameMax) {
+      errs.name = `Company name must be at most ${VALID.companyNameMax} characters.`;
+      hasError = true;
+    }
+
     const phone = (tenant.company_phone || '').trim();
     if (phone) {
       const p = validatePhone(phone);
-      if (!p.ok) { setError(p.msg); return; }
+      if (!p.ok) { errs.phone = p.msg; hasError = true; }
     }
-    const emailRes = validateEmail(tenant.company_email, false);
-    if (!emailRes.ok) { setError(emailRes.msg); return; }
-    const taxRate = parseFloat(tenant.tax_rate);
-    if (isNaN(taxRate) || taxRate < 0 || taxRate > 1) { setError('Tax rate must be 0–100%.'); return; }
-    const minQuote = parseFloat(tenant.minimum_quote);
-    if (isNaN(minQuote) || minQuote < 0) { setError('Minimum quote must be $0 or greater.'); return; }
+
+    const email = (tenant.company_email || '').trim();
+    if (email) {
+      const emailRes = validateEmail(tenant.company_email, false);
+      if (!emailRes.ok) { errs.email = emailRes.msg; hasError = true; }
+    }
+
+    const address = (tenant.company_address || '').trim();
+    if (address && address.length > VALID.companyAddressMax) {
+      errs.address = `Address must be at most ${VALID.companyAddressMax} characters.`;
+      hasError = true;
+    }
+
+    if (hasError) {
+      setFieldErrors(errs);
+      setError(Object.values(errs).find(Boolean) || 'Please fix the errors below.');
+      return;
+    }
+
+    const taxRes = parseTaxRatePercent(taxRateInput);
+    if (!taxRes.ok) { setError(taxRes.msg); return; }
+    const taxRate = taxRes.value;
+    const minQuoteRes = parseMinimumQuote(minQuoteInput);
+    if (!minQuoteRes.ok) { setError(minQuoteRes.msg); return; }
+    const minQuote = minQuoteRes.value;
     setSaving(true);
     try {
       const updated = await api('/tenant', { method: 'PATCH', body: { name, company_phone: tenant.company_phone || undefined, company_email: tenant.company_email || undefined, company_address: tenant.company_address || undefined, timezone: tenant.timezone, tax_rate: taxRate, minimum_quote: minQuote } });
       setTenant(updated);
+      setTaxRateInput(formatTaxRateDisplay(updated.tax_rate));
+      setMinQuoteInput(formatMinimumQuoteDisplay(updated.minimum_quote) || '150');
+      updateTenant(updated);
       setSuccess('Company settings saved.');
+      setFieldErrors({ name: '', phone: '', email: '', address: '' });
     } catch (e) {
       setError(e.message || 'Could not save settings. Please try again.');
     }
@@ -1442,36 +1527,47 @@ function SettingsPage() {
       {tab === 'company' && tenant && (
         <div className="card">
           <div className="card-title" style={{marginBottom:'20px'}}>Company Settings</div>
-          <div className="form-group"><label className="form-label">Company Name *</label>
-            <input className="form-input" value={tenant.name || ''} onChange={e => setTenant({...tenant, name: e.target.value})} maxLength={VALID.companyNameMax} placeholder="Your Company LLC" />
-            <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Required. 1–{VALID.companyNameMax} characters.</p></div>
+          <div className="form-group"><label className="form-label">Company name *</label>
+            <input className="form-input" value={tenant.name || ''} onChange={e => { setTenant({...tenant, name: e.target.value}); if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' })); }} maxLength={VALID.companyNameMax} placeholder="Your Company LLC" aria-invalid={!!fieldErrors.name} />
+            {fieldErrors.name && <p style={{ color: 'var(--red-500)', fontSize: '12px', marginTop: '4px' }}>⚠ {fieldErrors.name}</p>}
+            {!fieldErrors.name && <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Required. 1–{VALID.companyNameMax} characters.</p>}
+          </div>
           <div className="form-row">
             <div className="form-group"><label className="form-label">Phone</label>
-              <input className="form-input" value={tenant.company_phone || ''} onChange={e => setTenant({...tenant, company_phone: e.target.value})} placeholder="5551234567" />
-              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. 10–15 digits if provided.</p></div>
+              <input className="form-input" value={tenant.company_phone || ''} onChange={e => { setTenant({...tenant, company_phone: e.target.value}); if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' })); }} placeholder="5551234567" aria-invalid={!!fieldErrors.phone} />
+              {fieldErrors.phone && <p style={{ color: 'var(--red-500)', fontSize: '12px', marginTop: '4px' }}>⚠ {fieldErrors.phone}</p>}
+              {!fieldErrors.phone && <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. 10–15 digits if provided.</p>}
+            </div>
             <div className="form-group"><label className="form-label">Email</label>
-              <input className="form-input" type="email" value={tenant.company_email || ''} onChange={e => setTenant({...tenant, company_email: e.target.value})} placeholder="contact@company.com" />
-              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. Valid email if provided.</p></div>
+              <input className="form-input" type="email" value={tenant.company_email || ''} onChange={e => { setTenant({...tenant, company_email: e.target.value}); if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' })); }} placeholder="contact@company.com" aria-invalid={!!fieldErrors.email} />
+              {fieldErrors.email && <p style={{ color: 'var(--red-500)', fontSize: '12px', marginTop: '4px' }}>⚠ {fieldErrors.email}</p>}
+              {!fieldErrors.email && <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. Valid email if provided.</p>}
+            </div>
           </div>
           <div className="form-group"><label className="form-label">Address</label>
-            <input className="form-input" value={tenant.company_address || ''} onChange={e => setTenant({...tenant, company_address: e.target.value})} placeholder="123 Main St" /></div>
+            <input className="form-input" value={tenant.company_address || ''} onChange={e => { setTenant({...tenant, company_address: e.target.value}); if (fieldErrors.address) setFieldErrors(prev => ({ ...prev, address: '' })); }} placeholder="123 Main St" maxLength={VALID.companyAddressMax} aria-invalid={!!fieldErrors.address} />
+            {fieldErrors.address && <p style={{ color: 'var(--red-500)', fontSize: '12px', marginTop: '4px' }}>⚠ {fieldErrors.address}</p>}
+            {!fieldErrors.address && <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>Optional. Up to {VALID.companyAddressMax} characters.</p>}
+          </div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Tax Rate (%)</label>
+            <div className="form-group"><label className="form-label">Tax rate (%)</label>
               <div style={{position:'relative'}}>
-                <input className="form-input" type="number" step="0.01" min={0} max={100}
-                  value={(parseFloat(tenant.tax_rate || 0) * 100).toFixed(2)}
-                  onChange={e => setTenant({...tenant, tax_rate: parseFloat(e.target.value || 0) / 100})} />
+                <input className="form-input" type="text" inputMode="decimal" autoComplete="off"
+                  placeholder="e.g. 8.25"
+                  value={taxRateInput}
+                  onChange={e => setTaxRateInput(e.target.value)} />
                 <span style={{position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--earth-500)',fontSize:'13px'}}>%</span>
               </div>
-              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>0–100%.</p></div>
-            <div className="form-group"><label className="form-label">Minimum Quote ($)</label>
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>0–100, up to 2 decimals (e.g. 8.25 for 8.25%).</p></div>
+            <div className="form-group"><label className="form-label">Minimum quote ($)</label>
               <div style={{position:'relative'}}>
                 <span style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--earth-500)',fontSize:'13px'}}>$</span>
-                <input className="form-input" style={{paddingLeft:'24px'}} type="number" min={0}
-                  value={tenant.minimum_quote || 150}
-                  onChange={e => setTenant({...tenant, minimum_quote: parseFloat(e.target.value || 0)})} />
+                <input className="form-input" style={{paddingLeft:'24px'}} type="text" inputMode="decimal" autoComplete="off"
+                  placeholder="e.g. 150 or 99.50"
+                  value={minQuoteInput}
+                  onChange={e => setMinQuoteInput(e.target.value)} />
               </div>
-              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>$0 or more.</p></div>
+              <p style={{ color: 'var(--earth-500)', fontSize: '12px', marginTop: '4px' }}>$0–$500, up to 2 decimals (e.g. 150 or 99.50).</p></div>
           </div>
           <div style={{display:'flex',justifyContent:'flex-end'}}>
             <button className="btn btn-primary" onClick={saveCompany} disabled={saving}>{saving ? <Spinner /> : 'Save Changes'}</button>
@@ -1655,6 +1751,7 @@ function AppShell() {
         <div className="main-content">
           <div className="topbar">
             <h1 className="page-title">{pageTitles[page] || page}</h1>
+            <span className="topbar-company">{tenant.name || 'My Company'}</span>
           </div>
           <div className="page-body">{renderPage()}</div>
         </div>

@@ -163,10 +163,13 @@ async def login(
     tenant_repo = TenantRepo(db)
     tenant = await tenant_repo.get_by_id(user.tenant_id)
 
-    # Check onboarding status so frontend can show wizard for new tenants
-    onboarding_svc = OnboardingService(db, user.tenant_id)
-    onboarding_status = await onboarding_svc.get_status()
-    onboarding_required = not onboarding_status.get("is_complete", False)
+    # Onboarding: use explicit flag first (set when user completes step 5), else infer from catalog/crew data
+    if getattr(tenant, "onboarding_completed_at", None) is not None:
+        onboarding_required = False
+    else:
+        onboarding_svc = OnboardingService(db, user.tenant_id)
+        onboarding_status = await onboarding_svc.get_status()
+        onboarding_required = not onboarding_status.get("is_complete", False)
 
     log.info("auth.login_success", tenant_id=str(user.tenant_id))
 

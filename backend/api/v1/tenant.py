@@ -1,6 +1,7 @@
 """
 Tenant management — settings, onboarding wizard, user management.
 """
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -64,8 +65,12 @@ async def update_tenant(
         data = body.model_dump(exclude_none=True)
         if "tax_rate" in data and (data["tax_rate"] is None or data["tax_rate"] < 0 or data["tax_rate"] > 1):
             raise _user_error("Tax rate must be between 0% and 100%.")
-        if "minimum_quote" in data and (data["minimum_quote"] is None or data["minimum_quote"] < 0):
-            raise _user_error("Minimum quote must be 0 or greater.")
+        if "minimum_quote" in data and (
+            data["minimum_quote"] is None
+            or data["minimum_quote"] < 0
+            or float(data["minimum_quote"]) > 500
+        ):
+            raise _user_error("Minimum quote must be between $0 and $500.")
         if "name" in data and (not data["name"] or not str(data["name"]).strip()):
             raise _user_error("Company name is required.")
         repo = TenantRepo(db)
@@ -118,8 +123,10 @@ async def onboarding_step1(
             raise _onboarding_error("Business phone must be at most 15 digits.")
         if data.get("tax_rate") is not None and (float(data["tax_rate"]) < 0 or float(data["tax_rate"]) > 1):
             raise _onboarding_error("Tax rate must be between 0% and 100%.")
-        if data.get("minimum_quote") is not None and float(data["minimum_quote"]) < 0:
-            raise _onboarding_error("Minimum quote must be 0 or greater.")
+        if data.get("minimum_quote") is not None:
+            mq = float(data["minimum_quote"])
+            if mq < 0 or mq > 500:
+                raise _onboarding_error("Minimum quote must be between $0 and $500.")
         await repo.update(user.tenant_id, **data)
         return {"step": 1, "completed": True}
     except HTTPException:
@@ -198,6 +205,8 @@ async def onboarding_step5(
             raise _onboarding_error("Crew name is too long.")
         crew_repo = CrewRepo(db, user.tenant_id)
         await crew_repo.create(name=name)
+        tenant_repo = TenantRepo(db)
+        await tenant_repo.update(user.tenant_id, onboarding_completed_at=datetime.now(timezone.utc))
         return {"step": 5, "completed": True, "onboarding_complete": True}
     except HTTPException:
         raise
