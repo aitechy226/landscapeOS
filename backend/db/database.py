@@ -105,9 +105,13 @@ async def init_db():
 
 async def check_db_connection() -> bool:
     """Health check — verify DB is reachable using raw asyncpg."""
+    url = getattr(settings, "DATABASE_URL", None)
+    if not url or not str(url).strip():
+        log.error("db.health_check_failed", error="DATABASE_URL not set")
+        return False
     try:
         conn = await asyncpg.connect(
-            settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"),
+            url.replace("postgresql+asyncpg://", "postgresql://"),
             ssl=ssl_context,
             statement_cache_size=0,
         )

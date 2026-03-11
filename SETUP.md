@@ -8,7 +8,7 @@
 - Docker + Docker Compose (for local dev)
 - Git
 - A domain name (e.g. `landscapeos.com`)
-- Accounts: Supabase, Render, Cloudflare, Anthropic, Stripe
+- Accounts: Supabase, Render, Cloudflare, Google (AI Studio for Gemini), Stripe
 
 ---
 
@@ -22,7 +22,7 @@ cd landscapeos/backend
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials (Supabase, Anthropic, etc).
+Edit `.env` with your credentials (Supabase, Gemini, etc).
 At minimum, set these for local dev:
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/landscapeos
@@ -32,7 +32,7 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_KEY=YOUR_SERVICE_KEY
 SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_JWT_SECRET=YOUR_JWT_SECRET
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...   # from https://aistudio.google.com/apikey
 SUPERADMIN_KEY=pick-a-long-random-string
 ```
 
@@ -191,7 +191,7 @@ SUPABASE_URL=https://[REF].supabase.co
 SUPABASE_SERVICE_KEY=[your service key]
 SUPABASE_ANON_KEY=[your anon key]
 SUPABASE_JWT_SECRET=[your jwt secret]
-ANTHROPIC_API_KEY=sk-ant-[...]
+GEMINI_API_KEY=AIza[...]   # from https://aistudio.google.com/apikey
 STRIPE_SECRET_KEY=sk_live_[...]
 STRIPE_WEBHOOK_SECRET=whsec_[...]
 TWILIO_ACCOUNT_SID=AC[...]
@@ -359,7 +359,7 @@ curl https://api.landscapeos.com/api/v1/admin/stats \
 ### View costs
 - Render: https://dashboard.render.com/billing
 - Supabase: https://supabase.com/dashboard/org/_/billing
-- Anthropic: https://console.anthropic.com/settings/billing
+- Google AI: https://aistudio.google.com/ (API usage / billing)
 
 ---
 

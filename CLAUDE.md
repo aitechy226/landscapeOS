@@ -8,7 +8,7 @@ Tenants manage quotes, crews, schedules, and clients. Built mobile-first.
 - **Backend**: Python 3.11 / FastAPI / SQLAlchemy 2.0 / Alembic / Postgres (Supabase)
 - **Frontend**: React 18 / Vite / TailwindCSS (web first, Expo later for iOS)
 - **Auth**: Supabase Auth (JWT, MFA, OAuth)
-- **AI**: Anthropic Claude Sonnet for quoting, Haiku for CRM/comms
+- **AI**: Google Gemini for quote generation (AI Studio API key)
 - **Storage**: Supabase Storage
 - **Payments**: Stripe
 - **SMS**: Twilio
@@ -46,12 +46,10 @@ Tenants manage quotes, crews, schedules, and clients. Built mobile-first.
 - Health check at `/health`
 
 ## AI Model Routing
-- `quote_generation`: claude-sonnet-4-5 (quality critical)
-- `quote_refinement`: claude-haiku-4-5 (follow-up edits)
-- `email_drafting`: claude-haiku-4-5
-- `schedule_summary`: claude-haiku-4-5
-- NEVER hardcode model names — always use `MODEL_ROUTING` dict
-- Cache Anthropic responses in DB with 24hr TTL by input hash
+- `quote_generation`: gemini-2.0-flash (or gemini-2.5-flash for newer; set in ai_service MODEL_ROUTING)
+- `quote_refinement`: gemini-2.0-flash
+- NEVER hardcode model names — always use `MODEL_ROUTING` dict in ai_service
+- Cache AI responses in DB with 24hr TTL by input hash (AICache model)
 
 ## Tenant Tiers
 - `starter`: 3 users, 50 quotes/month, no custom branding, no route optimization

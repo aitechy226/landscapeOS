@@ -2,10 +2,15 @@
 Application configuration — all settings from environment variables.
 Never hardcode secrets. Copy .env.example to .env for local dev.
 """
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, validator
 from typing import Optional
 import secrets
+
+# .env next to this file (backend/.env) so it's found regardless of CWD
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -28,8 +33,8 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_JWT_SECRET: str   # from Supabase dashboard → Settings → API
 
-    # ─── Anthropic ────────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str
+    # ─── AI (Gemini for quote generation) ───────────────────────────────────────
+    GEMINI_API_KEY: str = ""  # Google AI Studio API key; required for AI quote generation
 
     # ─── Stripe ───────────────────────────────────────────────────────────────
     STRIPE_SECRET_KEY: str
@@ -76,8 +81,9 @@ class Settings(BaseSettings):
         return self.APP_ENV == "production"
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_PATH) if _ENV_PATH.exists() else None  # backend/.env
         case_sensitive = True
+        extra = "ignore"  # ignore extra env vars not defined on Settings
 
 
 settings = Settings()

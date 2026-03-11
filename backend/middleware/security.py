@@ -27,12 +27,15 @@ security = HTTPBearer()
 
 PERMISSIONS: dict[str, list[UserRole]] = {
     # Quotes
-    "quotes:create":         [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
+    "quotes:read":           [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     "quotes:read_own":       [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     "quotes:read_all":       [UserRole.OWNER, UserRole.ADMIN],
+    "quotes:create":         [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
+    "quotes:write":          [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     "quotes:update":         [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     "quotes:delete":         [UserRole.OWNER, UserRole.ADMIN],
     "quotes:send":           [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
+    "quotes:approve":        [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     # Clients
     "clients:create":        [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
     "clients:read":          [UserRole.OWNER, UserRole.ADMIN, UserRole.CREW_LEAD],
@@ -167,7 +170,10 @@ def require_permission(permission: str):
     ) -> User:
         if permission not in PERMISSIONS:
             log.error("authz.unknown_permission", permission=permission)
-            raise HTTPException(status_code=500, detail="Unknown permission")
+            raise HTTPException(
+                status_code=500,
+                detail={"message": "Unknown permission.", "code": "UNKNOWN_PERMISSION"},
+            )
 
         allowed_roles = PERMISSIONS[permission]
         if user.role not in allowed_roles:
@@ -181,7 +187,7 @@ def require_permission(permission: str):
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
+                detail={"message": "Insufficient permissions.", "code": "FORBIDDEN"},
             )
 
         return user

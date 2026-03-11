@@ -13,7 +13,8 @@ from db.database import get_db
 from models.models import Tenant, User, UserRole, TenantStatus, TenantTier
 from schemas.schemas import (
     SignupRequest, LoginRequest, TokenResponse, RefreshRequest,
-    ResetPasswordRequest, TenantResponse, UserResponse,
+    ForgotPasswordRequest, ResendConfirmationRequest, ResetPasswordRequest,
+    TenantResponse, UserResponse,
 )
 from repositories.repositories import TenantRepo, UserRepo
 from config import settings
@@ -78,7 +79,7 @@ async def signup(
         log.error("auth.signup_failed", error=str(e))
         raise HTTPException(
             status_code=400,
-            detail={"message": str(e) if str(e) else "Signup failed. Please try again."},
+            detail={"message": "Signup failed. Please check your details and try again.", "code": "SIGNUP_FAILED"},
         )
 
     # Create tenant
@@ -141,7 +142,10 @@ async def login(
         except HTTPException:
             raise
         log.warning("auth.login_failed", email_domain=body.email.split("@")[-1])
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=401,
+            detail={"message": "Invalid email or password.", "code": "INVALID_CREDENTIALS"},
+        )
 
     # Load user from DB
     result = await db.execute(
@@ -153,7 +157,10 @@ async def login(
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(status_code=401, detail="Account not found")
+        raise HTTPException(
+            status_code=401,
+            detail={"message": "Account not found.", "code": "ACCOUNT_NOT_FOUND"},
+        )
 
     # Update last login
     user.last_login_at = datetime.now(timezone.utc)
@@ -200,6 +207,11 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(body: RefreshRequest):
     """Rotate refresh token and issue new access token."""
+    if not (body.refresh_token and body.refresh_token.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Refresh token is required.", "code": "MISSING_REFRESH_TOKEN"},
+        )
     try:
         tokens = await supabase_svc.refresh_session(body.refresh_token)
         return TokenResponse(
@@ -207,8 +219,12 @@ async def refresh_token(body: RefreshRequest):
             refresh_token=tokens["refresh_token"],
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    except Exception as e:
+        log.warning("auth.refresh_failed", error=str(e))
+        raise HTTPException(
+            status_code=401,
+            detail={"message": "Invalid or expired refresh token.", "code": "REFRESH_FAILED"},
+        )
 
 
 @router.post("/logout")
@@ -224,13 +240,12 @@ async def logout(
 
 
 @router.post("/forgot-password")
-async def forgot_password(email: str):
-    """Send password reset email via Supabase."""
-    # Always return success (don't reveal if email exists)
+async def forgot_password(body: ForgotPasswordRequest):
+    """Send password reset email via Supabase. Always return success (don't reveal if email exists)."""
     try:
-        await supabase_svc.send_password_reset(email)
-    except Exception:
-        pass
+        await supabase_svc.send_password_reset(body.email)
+    except Exception as e:
+        log.warning("auth.forgot_password_failed", error=str(e))
     return {"message": "If that email exists, a reset link has been sent"}
 
 
@@ -253,17 +268,15 @@ async def reset_password(body: ResetPasswordRequest):
 
 
 @router.post("/resend-confirmation")
-async def resend_confirmation(body: dict):
+async def resend_confirmation(body: ResendConfirmationRequest):
     """Resend the signup confirmation email. No auth required — used after login returns EMAIL_NOT_CONFIRMED."""
-    email = (body.get("email") or "").strip()
-    if not email:
-        raise HTTPException(status_code=400, detail={"message": "Email is required."})
     try:
-        await supabase_svc.resend_confirmation(email)
+        await supabase_svc.resend_confirmation(body.email)
         return {
             "message": "A new confirmation link has been sent to your email. Check your inbox and spam folder.",
         }
     except Exception as e:
+        log.warning("auth.resend_confirmation_failed", error=str(e))
         raise HTTPException(
             status_code=400,
             detail={"message": str(e) if str(e) else "Could not resend. Please try again."},

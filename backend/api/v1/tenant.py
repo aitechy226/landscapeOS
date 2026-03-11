@@ -2,7 +2,7 @@
 Tenant management — settings, onboarding wizard, user management.
 """
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
@@ -45,7 +45,7 @@ async def get_tenant(
     repo = TenantRepo(db)
     tenant = await repo.get_by_id(user.tenant_id)
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
     return tenant
 
 
@@ -76,7 +76,7 @@ async def update_tenant(
         repo = TenantRepo(db)
         tenant = await repo.update(user.tenant_id, **data)
         if not tenant:
-            raise HTTPException(404, "Tenant not found")
+            raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
         log.info("tenant.updated", tenant_id=str(user.tenant_id))
         return tenant
     except HTTPException:
@@ -94,8 +94,14 @@ async def get_onboarding_status(
     user: User = Depends(require_permission("settings:read")),
     db: AsyncSession = Depends(get_db),
 ):
-    svc = OnboardingService(db, user.tenant_id)
-    return await svc.get_status()
+    try:
+        svc = OnboardingService(db, user.tenant_id)
+        return await svc.get_status()
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("onboarding.status_failed", error=str(e), tenant_id=str(user.tenant_id))
+        raise _user_error("Could not load onboarding status.")
 
 
 def _onboarding_error(message: str):
@@ -149,6 +155,8 @@ async def onboarding_step2(
         return {"step": 2, "completed": True}
     except HTTPException:
         raise
+    except ValueError as e:
+        raise _onboarding_error(str(e) if str(e) else "Invalid services data.")
     except Exception as e:
         log.exception("onboarding.step2_failed", tenant_id=str(user.tenant_id))
         raise _onboarding_error("Could not save services. Please try again.")
@@ -167,6 +175,8 @@ async def onboarding_step3(
         return {"step": 3, "completed": True}
     except HTTPException:
         raise
+    except ValueError as e:
+        raise _onboarding_error(str(e) if str(e) else "Invalid materials data.")
     except Exception as e:
         log.exception("onboarding.step3_failed", tenant_id=str(user.tenant_id))
         raise _onboarding_error("Could not save materials. Please try again.")
@@ -185,6 +195,8 @@ async def onboarding_step4(
         return {"step": 4, "completed": True}
     except HTTPException:
         raise
+    except ValueError as e:
+        raise _onboarding_error(str(e) if str(e) else "Invalid labor rates data.")
     except Exception as e:
         log.exception("onboarding.step4_failed", tenant_id=str(user.tenant_id))
         raise _onboarding_error("Could not save labor rates. Please try again.")
@@ -298,12 +310,12 @@ async def update_user(
 
     # Cannot demote yourself
     if user_id == current_user.id and body.role and body.role != current_user.role:
-        raise HTTPException(400, detail={"message": "Cannot change your own role."})
+        raise HTTPException(status_code=400, detail={"message": "Cannot change your own role."})
 
     try:
         updated = await repo.update(user_id, **body.model_dump(exclude_none=True))
         if not updated:
-            raise HTTPException(404, "User not found")
+            raise HTTPException(status_code=404, detail={"message": "User not found."})
         return updated
     except HTTPException:
         raise
@@ -320,12 +332,12 @@ async def deactivate_user(
     db: AsyncSession = Depends(get_db),
 ):
     if user_id == current_user.id:
-        raise HTTPException(400, "Cannot deactivate your own account")
+        raise HTTPException(status_code=400, detail={"message": "Cannot deactivate your own account."})
 
     repo = UserRepo(db, current_user.tenant_id)
     success = await repo.soft_delete(user_id)
     if not success:
-        raise HTTPException(404, "User not found")
+        raise HTTPException(status_code=404, detail={"message": "User not found."})
     return {"message": "User deactivated"}
 
 
@@ -369,7 +381,7 @@ async def update_service(
     repo = ServiceCatalogRepo(db, user.tenant_id)
     updated = await repo.update(service_id, **body.model_dump(exclude_none=True))
     if not updated:
-        raise HTTPException(404, "Service not found")
+        raise HTTPException(status_code=404, detail={"message": "Service not found."})
     return updated
 
 
@@ -383,7 +395,7 @@ async def delete_service(
     repo = ServiceCatalogRepo(db, user.tenant_id)
     success = await repo.soft_delete(service_id)
     if not success:
-        raise HTTPException(404, "Service not found")
+        raise HTTPException(status_code=404, detail={"message": "Service not found."})
     return {"message": "Service removed"}
 
 
@@ -479,27 +491,32 @@ async def create_crew(
 @router.get("/clients")
 async def list_clients(
     request: Request,
-    page: int = 1,
-    page_size: int = 20,
-    search: Optional[str] = None,
     user: User = Depends(require_permission("clients:read")),
     db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
 ):
     import math
-    repo = ClientRepo(db, user.tenant_id)
-
-    if search:
-        items = await repo.search(search, page, page_size)
-        return {"items": items, "page": page, "page_size": page_size}
-
-    items, total = await repo.get_paginated(page=page, page_size=page_size)
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "pages": math.ceil(total / page_size),
-    }
+    try:
+        repo = ClientRepo(db, user.tenant_id)
+        if search and (search or "").strip():
+            items = await repo.search((search or "").strip(), page, page_size)
+            return {"items": items, "page": page, "page_size": page_size}
+        items, total = await repo.get_paginated(page=page, page_size=page_size)
+        pages = math.ceil(total / page_size) if total else 0
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("clients.list_failed", error=str(e), tenant_id=str(user.tenant_id))
+        raise _user_error("Could not load clients. Please try again.")
 
 
 @router.post("/clients", status_code=201)

@@ -107,6 +107,11 @@ INDUSTRY_TEMPLATES = {
 }
 
 
+MAX_SERVICES = 500
+MAX_MATERIALS = 200
+MAX_LABOR_RATES = 50
+
+
 class OnboardingService:
 
     def __init__(self, db: AsyncSession, tenant_id: UUID):
@@ -166,41 +171,58 @@ class OnboardingService:
         }
 
     async def setup_services(self, template: str = None, custom_services: list = None):
-        """Load industry template or custom services."""
+        """Load industry template or custom services. Template takes precedence when valid."""
         repo = ServiceCatalogRepo(self.db, self.tenant_id)
         services_to_create = []
 
-        if template and template in INDUSTRY_TEMPLATES:
+        if template and str(template).strip() and template in INDUSTRY_TEMPLATES:
             services_to_create = INDUSTRY_TEMPLATES[template]["services"]
             log.info("onboarding.template_applied", template=template, tenant_id=str(self.tenant_id))
         elif custom_services:
-            services_to_create = [s.model_dump() for s in custom_services]
+            if len(custom_services) > MAX_SERVICES:
+                raise ValueError(f"Too many services (max {MAX_SERVICES}).")
+            services_to_create = [
+                s.model_dump() if hasattr(s, "model_dump") else s
+                for s in custom_services
+            ]
 
         for i, svc in enumerate(services_to_create):
+            if not isinstance(svc, dict):
+                continue
             await repo.create(**svc, sort_order=i)
 
     async def setup_materials(self, custom_materials: list = None, template: str = None):
-        """Load materials from template or custom list."""
+        """Load materials from template or custom list. Template takes precedence when valid."""
         repo = MaterialCatalogRepo(self.db, self.tenant_id)
-
         materials_to_create = []
-        if template and template in INDUSTRY_TEMPLATES:
+        if template and str(template).strip() and template in INDUSTRY_TEMPLATES:
             materials_to_create = INDUSTRY_TEMPLATES[template]["materials"]
         elif custom_materials:
-            materials_to_create = [m.model_dump() for m in custom_materials]
-
+            if len(custom_materials) > MAX_MATERIALS:
+                raise ValueError(f"Too many materials (max {MAX_MATERIALS}).")
+            materials_to_create = [
+                m.model_dump() if hasattr(m, "model_dump") else m
+                for m in custom_materials
+            ]
         for mat in materials_to_create:
+            if not isinstance(mat, dict):
+                continue
             await repo.create(**mat)
 
     async def setup_labor_rates(self, custom_rates: list = None, template: str = None):
-        """Load labor rates from template or custom list."""
+        """Load labor rates from template or custom list. Template takes precedence when valid."""
         repo = LaborRateRepo(self.db, self.tenant_id)
-
         rates_to_create = []
-        if template and template in INDUSTRY_TEMPLATES:
+        if template and str(template).strip() and template in INDUSTRY_TEMPLATES:
             rates_to_create = INDUSTRY_TEMPLATES[template]["labor_rates"]
         elif custom_rates:
-            rates_to_create = [r.model_dump() for r in custom_rates]
-
+            if len(custom_rates) > MAX_LABOR_RATES:
+                raise ValueError(f"Too many labor rates (max {MAX_LABOR_RATES}).")
+            rates_to_create = [
+                r.model_dump() if hasattr(r, "model_dump") else r
+                for r in custom_rates
+            ]
         for rate in rates_to_create:
+            if not isinstance(rate, dict):
+                continue
             await repo.create(**rate)

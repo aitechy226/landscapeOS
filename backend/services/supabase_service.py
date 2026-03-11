@@ -35,6 +35,11 @@ class SupabaseService:
 
     async def create_user(self, email: str, password: str) -> dict:
         """Create user via public signup endpoint — sends confirmation email."""
+        if not email or not str(email).strip():
+            raise ValueError("Email is required.")
+        if not password or not str(password).strip():
+            raise ValueError("Password is required.")
+        email = str(email).strip().lower()
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.url}/auth/v1/signup",
@@ -90,6 +95,11 @@ class SupabaseService:
             return data
 
     async def sign_in(self, email: str, password: str) -> dict:
+        if not email or not str(email).strip():
+            raise ValueError("Email is required.")
+        if not password or not str(password).strip():
+            raise ValueError("Password is required.")
+        email = str(email).strip().lower()
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.url}/auth/v1/token?grant_type=password",
@@ -125,6 +135,8 @@ class SupabaseService:
             }
 
     async def refresh_session(self, refresh_token: str) -> dict:
+        if not refresh_token or not str(refresh_token).strip():
+            raise ValueError("Refresh token is required.")
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.url}/auth/v1/token?grant_type=refresh_token",
@@ -170,6 +182,9 @@ class SupabaseService:
             return resp.json()
 
     async def resend_confirmation(self, email: str) -> dict:
+        if not email or not str(email).strip():
+            raise ValueError("Email is required.")
+        email = str(email).strip().lower()
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.url}/auth/v1/resend",
@@ -182,8 +197,3 @@ class SupabaseService:
             if resp.status_code not in (200, 201):
                 raise Exception("Could not resend confirmation email")
             return resp.json()
-
-
-
-
-    

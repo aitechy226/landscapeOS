@@ -82,7 +82,17 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = Field(min_length=1)
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request password reset email."""
+    email: EmailStr
+
+
+class ResendConfirmationRequest(BaseModel):
+    """Resend signup confirmation email."""
+    email: EmailStr
 
 
 class ResetPasswordRequest(BaseModel):
@@ -346,10 +356,72 @@ class OnboardingStatusResponse(BaseModel):
     completed_steps: list[int]
     is_complete: bool
 
-
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 class HealthResponse(BaseModel):
     status: str
     database: bool
     version: str = "1.0.0"
+
+
+# ─── Quotes ───────────────────────────────────────────────────────────────────
+
+class LineItem(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    quantity: Decimal = Field(ge=0, le=999_999)
+    unit: str = Field(default="each", max_length=50)
+    unit_price: Decimal = Field(ge=0, le=999_999.99)
+    total: Decimal = Field(ge=0)
+
+
+class CreateQuoteRequest(BaseModel):
+    client_id: UUID
+    job_description: str = Field(min_length=10, max_length=2000)
+    property_sqft: Optional[int] = Field(None, ge=0, le=9_999_999)
+    internal_notes: Optional[str] = Field(None, max_length=5000)
+
+
+class UpdateQuoteRequest(BaseModel):
+    line_items: Optional[list[LineItem]] = None
+    internal_notes: Optional[str] = Field(None, max_length=5000)
+    valid_until: Optional[datetime] = None
+    discount_amount: Optional[Decimal] = Field(None, ge=0)
+
+
+class AIGenerateRequest(BaseModel):
+    job_description: str = Field(min_length=10, max_length=2000)
+    property_sqft: Optional[int] = Field(None, ge=0, le=9_999_999)
+
+
+class SendQuoteRequest(BaseModel):
+    method: str = Field(pattern="^(email|download|both)$")
+    message: Optional[str] = Field(None, max_length=2000)
+
+
+class DeleteQuoteRequest(BaseModel):
+    quote_id: UUID
+
+
+class QuoteResponse(BaseModel):
+    id: UUID
+    quote_number: str
+    client_id: UUID
+    status: QuoteStatus
+    job_type: Optional[str]
+    description: Optional[str]
+    property_sqft: Optional[int]
+    ai_line_items: list
+    ai_notes: Optional[str]
+    subtotal: Decimal
+    tax_amount: Decimal
+    discount_amount: Decimal
+    total: Decimal
+    valid_until: Optional[datetime]
+    sent_at: Optional[datetime]
+    internal_notes: Optional[str]
+    created_at: datetime
+    client: Optional[dict] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+

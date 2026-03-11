@@ -2,7 +2,7 @@
 Superadmin API — only accessible by platform operators (you).
 Gated by SUPERADMIN_KEY header, completely separate from tenant auth.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -20,24 +20,32 @@ log = structlog.get_logger()
 router = APIRouter(prefix="/admin", tags=["Superadmin"])
 
 
-async def verify_superadmin(x_admin_key: str = Header(...)):
+def _admin_error(message: str, status: int = 400):
+    return HTTPException(status_code=status, detail={"message": message})
+
+
+async def verify_superadmin(x_admin_key: Optional[str] = Header(None)):
     """Verify the superadmin API key — set SUPERADMIN_KEY in env."""
-    if not settings.SUPERADMIN_KEY or x_admin_key != settings.SUPERADMIN_KEY:
+    if not settings.SUPERADMIN_KEY or not x_admin_key or x_admin_key != settings.SUPERADMIN_KEY:
         log.warning("admin.unauthorized_access_attempt")
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=403, detail={"message": "Forbidden.", "code": "FORBIDDEN"})
 
 
 @router.get("/tenants")
 async def list_all_tenants(
-    page: int = 1,
-    page_size: int = 50,
-    status: Optional[str] = None,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    status: Optional[str] = None,
 ):
     """List all tenants with usage stats."""
-    repo = TenantRepo(db)
-    tenants, total = await repo.get_all(page=page, page_size=page_size)
+    try:
+        repo = TenantRepo(db)
+        tenants, total = await repo.get_all(page=page, page_size=page_size)
+    except Exception as e:
+        log.exception("admin.list_tenants_failed", error=str(e))
+        raise _admin_error("Could not load tenants.", status=500)
 
     result = []
     for tenant in tenants:
@@ -67,16 +75,15 @@ async def list_all_tenants(
 
 @router.get("/tenants/{tenant_id}")
 async def get_tenant_detail(
-    tenant_id: str,
+    tenant_id: UUID,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     """Full tenant details including usage."""
-    from uuid import UUID
     repo = TenantRepo(db)
-    tenant = await repo.get_by_id(UUID(tenant_id))
+    tenant = await repo.get_by_id(tenant_id)
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
 
     users = await db.execute(
         select(User).where(User.tenant_id == tenant.id)
@@ -103,42 +110,45 @@ async def get_tenant_detail(
 
 @router.patch("/tenants/{tenant_id}/status")
 async def update_tenant_status(
-    tenant_id: str,
+    tenant_id: UUID,
     body: dict,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     """Suspend, reactivate, or cancel a tenant."""
-    from uuid import UUID
     new_status = body.get("status")
-    if new_status not in [s.value for s in TenantStatus]:
-        raise HTTPException(400, f"Invalid status: {new_status}")
+    if not new_status or not isinstance(new_status, str):
+        raise _admin_error("Status is required.")
+    valid = [s.value for s in TenantStatus]
+    if new_status not in valid:
+        raise _admin_error(f"Invalid status. Use one of: {', '.join(valid)}")
 
     repo = TenantRepo(db)
-    tenant = await repo.update(UUID(tenant_id), status=new_status)
+    tenant = await repo.update(tenant_id, status=new_status)
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
 
     log.info("admin.tenant_status_changed",
-             tenant_id=tenant_id, new_status=new_status)
+             tenant_id=str(tenant_id), new_status=new_status)
     return {"message": f"Tenant status updated to {new_status}"}
 
 
 @router.delete("/tenants/{tenant_id}/permanent")
 async def delete_tenant_permanent(
-    tenant_id: str,
+    tenant_id: UUID,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     """Permanently delete a tenant and all related data from the DB and Supabase Auth. Cannot be undone."""
     repo = TenantRepo(db)
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == UUID(tenant_id)).options(selectinload(Tenant.users))
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == tenant_id).options(selectinload(Tenant.users))
     )
-    tenant = tenant.scalar_one_or_none()
+    tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
 
+    slug_for_log = getattr(tenant, "slug", None) or str(tenant_id)
     supabase_svc = SupabaseService()
     for user in tenant.users:
         try:
@@ -146,26 +156,26 @@ async def delete_tenant_permanent(
         except Exception as e:
             log.warning("admin.permanent_delete_supabase_user_failed", user_id=str(user.id), error=str(e))
 
-    deleted = await repo.delete_permanent(UUID(tenant_id))
+    deleted = await repo.delete_permanent(tenant_id)
     if not deleted:
-        raise HTTPException(404, "Tenant not found")
-    log.info("admin.tenant_permanently_deleted", tenant_id=tenant_id, slug=tenant.slug)
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
+    log.info("admin.tenant_permanently_deleted", tenant_id=str(tenant_id), slug=slug_for_log)
     return {"message": "Tenant and all related data permanently deleted."}
 
 
 @router.delete("/tenants/{tenant_id}")
 async def delete_tenant(
-    tenant_id: str,
+    tenant_id: UUID,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel (soft-delete) a tenant. Sets status to cancelled; slug can be reused for new signups."""
     repo = TenantRepo(db)
-    tenant = await repo.get_by_id(UUID(tenant_id))
+    tenant = await repo.get_by_id(tenant_id)
     if not tenant:
-        raise HTTPException(404, "Tenant not found")
-    await repo.update(UUID(tenant_id), status=TenantStatus.CANCELLED)
-    log.info("admin.tenant_cancelled", tenant_id=tenant_id, slug=tenant.slug)
+        raise HTTPException(status_code=404, detail={"message": "Tenant not found."})
+    await repo.update(tenant_id, status=TenantStatus.CANCELLED)
+    log.info("admin.tenant_cancelled", tenant_id=str(tenant_id), slug=tenant.slug)
     return {"message": "Tenant cancelled. Company URL can be used again for new signups."}
 
 
@@ -198,16 +208,15 @@ async def platform_stats(
 
 @router.get("/audit-logs")
 async def get_audit_logs(
-    tenant_id: Optional[str] = None,
-    page: int = 1,
     _: None = Depends(verify_superadmin),
     db: AsyncSession = Depends(get_db),
+    tenant_id: Optional[UUID] = None,
+    page: int = Query(1, ge=1),
 ):
     """View audit logs — optionally filtered by tenant."""
-    from uuid import UUID
     repo = AuditLogRepo(db)
     if tenant_id:
-        logs, total = await repo.get_for_tenant(UUID(tenant_id), page=page)
+        logs, total = await repo.get_for_tenant(tenant_id, page=page)
     else:
         result = await db.execute(
             select(AuditLog)

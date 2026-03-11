@@ -14,6 +14,7 @@ from db.database import check_db_connection
 from middleware.tenant import TenantMiddleware, SecurityHeadersMiddleware
 from api.v1.auth import router as auth_router
 from api.v1.tenant import router as tenant_router
+from api.v1.quotes import router as quotes_router
 from api.v1.admin.admin import router as admin_router
 from schemas.schemas import HealthResponse
 
@@ -105,6 +106,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(tenant_router, prefix=settings.API_PREFIX)
+app.include_router(quotes_router, prefix=settings.API_PREFIX)
 app.include_router(admin_router, prefix=settings.API_PREFIX)
 
 
@@ -125,28 +127,28 @@ async def health_check():
 async def not_found_handler(request: Request, exc):
     return JSONResponse(
         status_code=404,
-        content={"detail": "Resource not found", "code": "NOT_FOUND"},
+        content={"detail": {"message": "Resource not found.", "code": "NOT_FOUND"}},
     )
 
 
 @app.exception_handler(500)
 async def server_error_handler(request: Request, exc):
     log.error("app.unhandled_exception",
-               path=str(request.url.path),
-               error=str(exc))
+              path=str(request.url.path),
+              error=str(exc))
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "code": "SERVER_ERROR"},
+        content={"detail": {"message": "Internal server error.", "code": "SERVER_ERROR"}},
     )
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     log.error("app.exception",
-               path=str(request.url.path),
-               error=str(exc),
-               exc_info=True)
+              path=str(request.url.path),
+              error=str(exc),
+              exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "An unexpected error occurred", "code": "SERVER_ERROR"},
+        content={"detail": {"message": "An unexpected error occurred.", "code": "SERVER_ERROR"}},
     )

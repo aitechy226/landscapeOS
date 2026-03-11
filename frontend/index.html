@@ -368,6 +368,20 @@
     .w-full { width: 100%; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .modal-panel {
+      background: var(--white); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg); max-width: 520px; width: 100%;
+      max-height: 90vh; overflow-y: auto; padding: 24px;
+    }
+    .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; color: var(--earth-800); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -436,6 +450,13 @@ const VALID = {
   slugMin: 2,
   slugMax: 100,
   slugRegex: /^[a-z0-9-]+$/,
+  quoteDescMin: 10,
+  quoteDescMax: 2000,
+  propertySqftMax: 9999999,
+  lineItemDescMax: 500,
+  lineItemQtyMax: 999999,
+  lineItemPriceMax: 999999.99,
+  lineItemsMax: 500,
 };
 function validatePhone(phone) {
   const digits = VALID.phoneDigits(phone);
@@ -490,13 +511,24 @@ function formatMinimumQuoteDisplay(value) {
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}, token = null) {
+  const method = (options.method || 'GET').toUpperCase();
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options, headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+    if (/failed to fetch|network|connection refused|load failed/i.test(msg)) {
+      throw new Error('Cannot reach the server. Is the backend running? Open ' + API_BASE.replace(/\/api\/v1\/?$/, '') + ' to check (e.g. http://localhost:8000).');
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -519,6 +551,9 @@ async function apiFetch(path, options = {}, token = null) {
     e.detail = typeof detail === 'object' && !Array.isArray(detail) ? detail : null;
     e.status = res.status;
     throw e;
+  }
+  if (res.status === 204 || res.headers.get('Content-Length') === '0') {
+    return null;
   }
   return res.json();
 }
@@ -1249,7 +1284,7 @@ function DashboardPage() {
   );
 }
 
-// ─── Clients Page ────────────────────────────────────────────────────────────
+// ─── Clients Page (with Client Detail, New Quote Modal, Quote Review) ─────────
 function ClientsPage() {
   const api = useApi();
   const [clients, setClients] = useState([]);
@@ -1260,9 +1295,51 @@ function ClientsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Client detail + quotes flow
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [quotesForClient, setQuotesForClient] = useState([]);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
+  const [quotesLoadError, setQuotesLoadError] = useState('');
+  const [showNewQuoteModal, setShowNewQuoteModal] = useState(false);
+  const [editingQuote, setEditingQuote] = useState(null);
+  // New quote form
+  const [newQuoteDesc, setNewQuoteDesc] = useState('');
+  const [newQuoteSqft, setNewQuoteSqft] = useState('');
+  const [generatingQuote, setGeneratingQuote] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
+  // Quote review edits (local copy of line items for PATCH)
+  const [editLineItems, setEditLineItems] = useState([]);
+  const [savingQuote, setSavingQuote] = useState(false);
+  const [sendingQuote, setSendingQuote] = useState(false);
+  const [deletingQuote, setDeletingQuote] = useState(false);
+  const [regeneratingQuote, setRegeneratingQuote] = useState(false);
+
   useEffect(() => {
     api('/clients?page_size=50').then(d => { setClients(d.items || []); setLoading(false); }).catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!selectedClient || selectedClient.id == null) { setQuotesForClient([]); setQuotesLoadError(''); return; }
+    setLoadingQuotes(true);
+    setQuotesLoadError('');
+    api('/quotes?client_id=' + encodeURIComponent(selectedClient.id) + '&page_size=50')
+      .then(d => { setQuotesForClient(Array.isArray(d.items) ? d.items : []); setQuotesLoadError(''); setLoadingQuotes(false); })
+      .catch(() => { setQuotesLoadError('Could not load quotes. You can still create a new quote.'); setLoadingQuotes(false); });
+  }, [selectedClient?.id]);
+
+  const openQuoteReview = (quote) => {
+    if (!quote || !quote.id) return;
+    setEditingQuote(quote);
+    setQuoteError('');
+    const items = Array.isArray(quote.ai_line_items) ? quote.ai_line_items : [];
+    setEditLineItems(items.map(i => ({
+      description: String(i.description != null ? i.description : '').slice(0, VALID.lineItemDescMax),
+      quantity: Math.min(VALID.lineItemQtyMax, Math.max(0, Number(i.quantity) || 0)),
+      unit: String(i.unit != null ? i.unit : 'each').slice(0, 50),
+      unit_price: Math.min(VALID.lineItemPriceMax, Math.max(0, Number(i.unit_price) || 0)),
+      total: Math.round((Number(i.quantity) || 0) * (Number(i.unit_price) || 0) * 100) / 100,
+    })));
+  };
 
   const validateClient = () => {
     const fn = (form.first_name || '').trim();
@@ -1319,6 +1396,344 @@ function ClientsPage() {
     !search || `${c.first_name} ${c.last_name} ${c.email || ''} ${c.phone || ''}`.toLowerCase().includes(search.toLowerCase())
   );
 
+  const handleNewQuoteGenerate = async () => {
+    setQuoteError('');
+    const desc = (newQuoteDesc || '').trim();
+    if (desc.length < VALID.quoteDescMin) {
+      setQuoteError(`Job description must be at least ${VALID.quoteDescMin} characters.`);
+      return;
+    }
+    if (desc.length > VALID.quoteDescMax) {
+      setQuoteError(`Job description must be at most ${VALID.quoteDescMax} characters.`);
+      return;
+    }
+    let sqft = undefined;
+    if (newQuoteSqft !== '' && newQuoteSqft != null) {
+      const n = parseInt(String(newQuoteSqft).trim(), 10);
+      if (isNaN(n) || n < 0) {
+        setQuoteError('Property sq ft must be 0 or a positive number.');
+        return;
+      }
+      if (n > VALID.propertySqftMax) {
+        setQuoteError(`Property sq ft must be at most ${VALID.propertySqftMax.toLocaleString()}.`);
+        return;
+      }
+      sqft = n;
+    }
+    if (!selectedClient || !selectedClient.id) {
+      setQuoteError('Please go back and select a client again.');
+      return;
+    }
+    setGeneratingQuote(true);
+    let created = null;
+    try {
+      created = await api('/quotes', { method: 'POST', body: { client_id: selectedClient.id, job_description: desc, property_sqft: sqft } });
+      if (!created || !created.id) {
+        setQuoteError('Quote was created but the response was invalid. Please refresh and try again.');
+        return;
+      }
+      const withAi = await api('/quotes/' + created.id + '/generate', { method: 'POST', body: { job_description: desc, property_sqft: sqft } });
+      if (!withAi || !Array.isArray(withAi.ai_line_items) || !withAi.ai_line_items.length) {
+        setQuoteError('AI did not return any line items. You can delete this draft or try Regenerate with AI in the quote view.');
+        setQuotesForClient(q => [created, ...(Array.isArray(q) ? q : [])]);
+        setShowNewQuoteModal(false);
+        setNewQuoteDesc('');
+        setNewQuoteSqft('');
+        openQuoteReview(created);
+        return;
+      }
+      setQuotesForClient(q => [withAi, ...(Array.isArray(q) ? q : [])]);
+      setShowNewQuoteModal(false);
+      setNewQuoteDesc('');
+      setNewQuoteSqft('');
+      openQuoteReview(withAi);
+    } catch (e) {
+      const msg = e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not create or generate quote. Please try again.');
+      setQuoteError(msg);
+      if (created && created.id) {
+        setQuotesForClient(q => [created, ...(Array.isArray(q) ? q : [])]);
+        setShowNewQuoteModal(false);
+        setNewQuoteDesc('');
+        setNewQuoteSqft('');
+        openQuoteReview(created);
+      }
+    } finally {
+      setGeneratingQuote(false);
+    }
+  };
+
+  const handleRegenerateQuote = async () => {
+    if (!editingQuote || editingQuote.status !== 'draft') return;
+    const desc = (editingQuote.description || '').trim();
+    if (desc.length < VALID.quoteDescMin) {
+      setQuoteError('Quote has no job description. Add a description or delete this draft and create a new quote from the client.');
+      return;
+    }
+    setQuoteError('');
+    setRegeneratingQuote(true);
+    try {
+      const sqft = editingQuote.property_sqft != null && editingQuote.property_sqft !== '' ? Number(editingQuote.property_sqft) : undefined;
+      const updated = await api('/quotes/' + editingQuote.id + '/generate', { method: 'POST', body: { job_description: desc, property_sqft: sqft } });
+      if (updated && Array.isArray(updated.ai_line_items) && updated.ai_line_items.length) {
+        setEditingQuote(updated);
+        setEditLineItems((updated.ai_line_items || []).map(i => ({
+          description: String(i.description != null ? i.description : '').slice(0, VALID.lineItemDescMax),
+          quantity: Math.min(VALID.lineItemQtyMax, Math.max(0, Number(i.quantity) || 0)),
+          unit: String(i.unit != null ? i.unit : 'each').slice(0, 50),
+          unit_price: Math.min(VALID.lineItemPriceMax, Math.max(0, Number(i.unit_price) || 0)),
+          total: Math.round((Number(i.quantity) || 0) * (Number(i.unit_price) || 0) * 100) / 100,
+        })));
+        setQuotesForClient(prev => (Array.isArray(prev) ? prev : []).map(q => q.id === updated.id ? updated : q));
+      } else {
+        setQuoteError('AI did not return any line items. The service may be busy. Please try again.');
+      }
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Regeneration failed. Please try again.'));
+    } finally {
+      setRegeneratingQuote(false);
+    }
+  };
+
+  const handleSaveQuote = async () => {
+    if (!editingQuote || editingQuote.status !== 'draft') return;
+    if (!editLineItems.length) {
+      setQuoteError('No line items to save. Generate with AI first or delete this draft.');
+      return;
+    }
+    const trimmed = editLineItems.map(i => ({
+      description: String(i.description != null ? i.description : '').trim().slice(0, VALID.lineItemDescMax),
+      quantity: Math.min(VALID.lineItemQtyMax, Math.max(0, Number(i.quantity) || 0)),
+      unit: String(i.unit != null ? i.unit : 'each').slice(0, 50),
+      unit_price: Math.min(VALID.lineItemPriceMax, Math.max(0, Number(i.unit_price) || 0)),
+    })).map(i => ({ ...i, total: Math.round(i.quantity * i.unit_price * 100) / 100 }));
+    const emptyDesc = trimmed.findIndex(i => !i.description);
+    if (emptyDesc >= 0) {
+      setQuoteError('Every line item needs a description. Please add or remove empty rows.');
+      return;
+    }
+    if (trimmed.length > VALID.lineItemsMax) {
+      setQuoteError(`You can have at most ${VALID.lineItemsMax} line items.`);
+      return;
+    }
+    setQuoteError('');
+    setSavingQuote(true);
+    try {
+      const updated = await api('/quotes/' + editingQuote.id, {
+        method: 'PATCH',
+        body: { line_items: trimmed },
+      });
+      setEditingQuote(updated);
+      setEditLineItems(Array.isArray(updated.ai_line_items) ? updated.ai_line_items.map(i => ({ ...i })) : []);
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not save quote. Please try again.'));
+    } finally {
+      setSavingQuote(false);
+    }
+  };
+
+  const handleApproveQuote = async () => {
+    if (!editingQuote || editingQuote.status !== 'draft') return;
+    if (!editLineItems.length) {
+      setQuoteError('Add at least one line item before approving.');
+      return;
+    }
+    setQuoteError('');
+    setSavingQuote(true);
+    try {
+      const updated = await api('/quotes/' + editingQuote.id + '/approve', { method: 'POST' });
+      setEditingQuote(updated);
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not approve quote. Please try again.'));
+    } finally {
+      setSavingQuote(false);
+    }
+  };
+
+  const handleSendQuote = async (method) => {
+    if (!editingQuote) return;
+    setQuoteError('');
+    setSendingQuote(true);
+    try {
+      await api('/quotes/' + editingQuote.id + '/send', { method: 'POST', body: { method, message: '' } });
+      const updated = await api('/quotes/' + editingQuote.id);
+      setEditingQuote(updated);
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not send quote. Please try again.'));
+    } finally {
+      setSendingQuote(false);
+    }
+  };
+
+  const handleDeleteQuote = async () => {
+    if (!editingQuote || editingQuote.status !== 'draft') return;
+    if (!window.confirm('Delete this draft quote? This cannot be undone.')) return;
+    const quoteId = editingQuote.id;
+    if (!quoteId) {
+      setQuoteError('Cannot delete: quote ID missing.');
+      return;
+    }
+    setQuoteError('');
+    setDeletingQuote(true);
+    try {
+      await api('/quotes/delete', { method: 'POST', body: { quote_id: String(quoteId) } });
+      setQuotesForClient(prev => (prev || []).filter(q => q.id !== quoteId));
+      setEditingQuote(null);
+      setEditLineItems([]);
+    } catch (e) {
+      setQuoteError(e && e.message ? e.message : (e && e.detail && e.detail.message ? e.detail.message : 'Could not delete quote. Please try again.'));
+    } finally {
+      setDeletingQuote(false);
+    }
+  };
+
+  // ─── Quote Review Screen ───────────────────────────────────────────────────
+  if (editingQuote) {
+    const subtotal = editLineItems.reduce((s, i) => s + (Number(i.total) || 0), 0);
+    const tax = Number(editingQuote.tax_amount) || 0;
+    const discount = Number(editingQuote.discount_amount) || 0;
+    const total = Math.round((subtotal + tax - discount) * 100) / 100;
+    const isDraft = editingQuote.status === 'draft';
+    const hasNoLineItems = !editLineItems.length;
+
+    return (
+      <div>
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button className="btn btn-ghost" onClick={() => { setEditingQuote(null); setQuoteError(''); }}>← Back</button>
+          <span className="font-semibold">Quote {editingQuote.quote_number}</span>
+          <Badge status={editingQuote.status} />
+        </div>
+        {quoteError && <Alert type="error">{quoteError}</Alert>}
+        {hasNoLineItems && isDraft && (
+          <Alert type="warning" style={{ marginBottom: '16px' }}>
+            This quote has no line items. AI generation may have failed or timed out. Use <strong>Regenerate with AI</strong> to try again, or <strong>Delete</strong> this draft.
+          </Alert>
+        )}
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Line items</div>
+            {isDraft && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {hasNoLineItems ? (
+                  <>
+                    <button className="btn btn-primary btn-sm" onClick={handleRegenerateQuote} disabled={regeneratingQuote || deletingQuote} title="Retry AI generation">{regeneratingQuote ? <Spinner /> : 'Regenerate with AI'}</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)' }} onClick={handleDeleteQuote} disabled={deletingQuote || regeneratingQuote} title="Delete this draft quote">{deletingQuote ? <Spinner /> : 'Delete'}</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn btn-secondary btn-sm" onClick={handleSaveQuote} disabled={savingQuote || deletingQuote}>{savingQuote ? <Spinner /> : 'Save'}</button>
+                    <button className="btn btn-primary btn-sm" onClick={handleApproveQuote} disabled={savingQuote || deletingQuote}>{savingQuote ? <Spinner /> : 'Approve'}</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => handleSendQuote('email')} disabled={sendingQuote || deletingQuote}>{sendingQuote ? <Spinner /> : 'Send by email'}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleSendQuote('download')} disabled={sendingQuote || deletingQuote}>Download PDF</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', marginLeft: 'auto' }} onClick={handleDeleteQuote} disabled={savingQuote || sendingQuote || deletingQuote} title="Delete this draft quote">{deletingQuote ? <Spinner /> : 'Delete'}</button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Total</th></tr>
+              </thead>
+              <tbody>
+                {editLineItems.map((item, idx) => (
+                  <tr key={idx}>
+                    <td><input className="form-input" style={{ minWidth: '180px' }} maxLength={VALID.lineItemDescMax} value={item.description || ''} onChange={e => { const n = [...editLineItems]; n[idx] = { ...n[idx], description: e.target.value.slice(0, VALID.lineItemDescMax) }; n[idx].total = Math.round((Number(n[idx].quantity) || 0) * (Number(n[idx].unit_price) || 0) * 100) / 100; setEditLineItems(n); }} /></td>
+                    <td><input className="form-input" type="number" style={{ width: '70px' }} min={0} max={VALID.lineItemQtyMax} value={item.quantity ?? ''} onChange={e => { const v = parseFloat(e.target.value); const q = isNaN(v) ? 0 : Math.min(VALID.lineItemQtyMax, Math.max(0, v)); const n = [...editLineItems]; n[idx] = { ...n[idx], quantity: q, total: Math.round(q * (Number(n[idx].unit_price) || 0) * 100) / 100 }; setEditLineItems(n); }} /></td>
+                    <td><input className="form-input" style={{ width: '80px' }} maxLength={50} value={item.unit || ''} onChange={e => { const n = [...editLineItems]; n[idx] = { ...n[idx], unit: e.target.value.slice(0, 50) }; setEditLineItems(n); }} /></td>
+                    <td><input className="form-input" type="number" style={{ width: '90px' }} min={0} max={VALID.lineItemPriceMax} step="0.01" value={item.unit_price ?? ''} onChange={e => { const v = parseFloat(e.target.value); const p = isNaN(v) ? 0 : Math.min(VALID.lineItemPriceMax, Math.max(0, v)); const n = [...editLineItems]; n[idx] = { ...n[idx], unit_price: p, total: Math.round((Number(n[idx].quantity) || 0) * p * 100) / 100 }; setEditLineItems(n); }} /></td>
+                    <td style={{ fontWeight: 600 }}>${(Number(item.total) || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: '16px', textAlign: 'right', borderTop: '1px solid var(--earth-300)', paddingTop: '16px' }}>
+            <div className="text-sm text-muted">Subtotal: ${subtotal.toFixed(2)} · Tax: ${tax.toFixed(2)} · Discount: ${discount.toFixed(2)}</div>
+            <div className="font-semibold" style={{ fontSize: '18px', marginTop: '4px' }}>Total: ${total.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Client Detail View ────────────────────────────────────────────────────
+  if (selectedClient) {
+    const client = selectedClient;
+    return (
+      <div>
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button className="btn btn-ghost" onClick={() => setSelectedClient(null)}>← Back to clients</button>
+          <button className="btn btn-primary" onClick={() => { setShowNewQuoteModal(true); setNewQuoteDesc(''); setNewQuoteSqft(''); setQuoteError(''); }}>+ New Quote</button>
+        </div>
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-title">{(client.first_name || '') + ' ' + (client.last_name || '') || 'Unnamed client'}</div>
+          <div className="card-subtitle">{(client.company_name ? client.company_name + ' · ' : '') + (client.email || '—') + ' · ' + (client.phone || '—')}</div>
+          <div className="text-sm text-muted" style={{ marginTop: '8px' }}>{[client.address, client.city, client.state, client.zip_code].filter(Boolean).join(', ') || 'No address'}</div>
+          {client.property_sqft != null && Number(client.property_sqft) > 0 && <div className="text-sm text-muted">Property: {Number(client.property_sqft).toLocaleString()} sq ft</div>}
+        </div>
+        <div className="card">
+          <div className="card-header">
+            <div><div className="card-title">Quotes</div><div className="card-subtitle">{quotesForClient.length} for this client</div></div>
+          </div>
+          {quotesLoadError && <Alert type="warning">{quotesLoadError}</Alert>}
+          {loadingQuotes ? <div style={{ padding: '24px', textAlign: 'center' }}><Spinner dark /></div> :
+            quotesForClient.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📋</div>
+                <div className="empty-title">No quotes yet</div>
+                <div className="empty-desc">Create a quote with AI in one click</div>
+                <button className="btn btn-primary" onClick={() => { setShowNewQuoteModal(true); setQuoteError(''); }}>New Quote</button>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead><tr><th>Quote #</th><th>Status</th><th>Description</th><th>Total</th><th>Date</th><th></th></tr></thead>
+                  <tbody>
+                    {quotesForClient.map(q => (
+                      <tr key={q.id}>
+                        <td><span className="font-medium">{q.quote_number}</span></td>
+                        <td><Badge status={q.status} /></td>
+                        <td className="text-sm text-muted">{(q.description || '').slice(0, 50)}{(q.description || '').length > 50 ? '…' : ''}</td>
+                        <td>${Number(q.total || 0).toFixed(2)}</td>
+                        <td className="text-sm">{q.created_at ? new Date(q.created_at).toLocaleDateString() : '—'}</td>
+                        <td><button className="btn btn-ghost btn-sm" onClick={() => openQuoteReview(q)}>View / Edit</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
+
+        {showNewQuoteModal && (
+          <div className="modal-overlay" onClick={() => !generatingQuote && setShowNewQuoteModal(false)}>
+            <div className="modal-panel" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">New quote — Generate with AI</div>
+              {quoteError && <Alert type="error">{quoteError}</Alert>}
+              <div className="form-group">
+                <label className="form-label">Job description * ({VALID.quoteDescMin}–{VALID.quoteDescMax} characters)</label>
+                <textarea className="form-input" rows={4} maxLength={VALID.quoteDescMax} value={newQuoteDesc} onChange={e => setNewQuoteDesc(e.target.value)} placeholder="e.g. Weekly lawn mowing, edging, and blow-off for front and back yard. Property ~5,000 sq ft." />
+                <p className="text-sm text-muted">{(newQuoteDesc || '').length} / {VALID.quoteDescMax}</p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Property sq ft (optional, 0–{VALID.propertySqftMax.toLocaleString()})</label>
+                <input className="form-input" type="number" value={newQuoteSqft} onChange={e => setNewQuoteSqft(e.target.value)} placeholder="5000" min={0} max={VALID.propertySqftMax} />
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-ghost" onClick={() => setShowNewQuoteModal(false)} disabled={generatingQuote}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleNewQuoteGenerate} disabled={generatingQuote || (newQuoteDesc || '').trim().length < VALID.quoteDescMin || (newQuoteDesc || '').trim().length > VALID.quoteDescMax}>
+                  {generatingQuote ? <><Spinner /> Generating…</> : '✨ Generate with AI'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Clients List ───────────────────────────────────────────────────────────
   return (
     <div>
       <div className="card">
@@ -1399,7 +1814,7 @@ function ClientsPage() {
               </thead>
               <tbody>
                 {filtered.map(c => (
-                  <tr key={c.id}>
+                  <tr key={c.id} onClick={() => setSelectedClient(c)} style={{ cursor: 'pointer' }}>
                     <td><span style={{fontWeight:'500'}}>{c.first_name} {c.last_name}</span>
                       {c.company_name && <div style={{fontSize:'12px', color:'var(--earth-500)'}}>{c.company_name}</div>}</td>
                     <td><div style={{fontSize:'13px'}}>{c.email || '—'}</div>

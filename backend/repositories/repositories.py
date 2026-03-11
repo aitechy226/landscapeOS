@@ -348,6 +348,31 @@ class QuoteRepo(TenantRepository[Quote]):
         )
         return list(result.scalars().all()), total
 
+    async def list_quotes(
+        self,
+        client_id: Optional[UUID] = None,
+        status: Optional[QuoteStatus] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Quote], int]:
+        """List quotes with optional client_id and status filters. Returns (items, total)."""
+        page_size = min(max(1, page_size), 100)
+        offset = (page - 1) * page_size
+        base = select(Quote).where(Quote.tenant_id == self.tenant_id)
+        count_base = select(func.count(Quote.id)).where(Quote.tenant_id == self.tenant_id)
+        if client_id is not None:
+            base = base.where(Quote.client_id == client_id)
+            count_base = count_base.where(Quote.client_id == client_id)
+        if status is not None:
+            base = base.where(Quote.status == status)
+            count_base = count_base.where(Quote.status == status)
+        total_result = await self.db.execute(count_base)
+        total = total_result.scalar()
+        result = await self.db.execute(
+            base.order_by(Quote.created_at.desc()).offset(offset).limit(page_size)
+        )
+        return list(result.scalars().all()), total
+
 
 # ─── Audit Log Repository ────────────────────────────────────────────────────
 
